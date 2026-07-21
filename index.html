@@ -3003,6 +3003,89 @@ function ensureColliders(){
 }
 const _rayDown = new THREE.Vector3(0, -1, 0);
 const _rayO = new THREE.Vector3();
+// ── 5m 实例化铁板地毯（2026-07-20 用户定版：单板 5m、城墙内全宽铺满）──
+// 12 万块板不能走 placedItems（物体/碰撞集爆炸），改 GPU 实例化：4 种板各烘一张 512px 顶面贴图，
+// 每型一个 InstancedMesh（5m 盒），逐格随机型号+随机 90° 朝向，顶面=地形+0.43（城心平地即统一 0.45 级）。
+// 存档只存 {seed,范围}（wh40k_pave_hive），恢复时按种子确定性重建；碰撞走 paveTopAt 解析钩子（挂在 probeSurf）。
+const PAVE_LS = () => 'wh40k_pave_' + currentId;
+const paveState = {cfg: null, meshes: [], tex: {}};
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function bakePanelTop(key){
+  // 顶视正交烘焙：无光照(Basic)保留原贴图颜色，背景深金属灰填补几何空隙
+  if(paveState.tex[key]) return paveState.tex[key];
+  const proto = editorProtos[key]; if(!proto) return null;
+  const c = proto.clone();
+  c.traverse(o => { if(o.isMesh){ const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    o.material = new THREE.MeshBasicMaterial({map: (m && m.map) || null, color: (m && m.map) ? 0xffffff : 0x777a80}); } });
+  const sc = new THREE.Scene(); sc.background = new THREE.Color(0x24272b); sc.add(c);
+  const bb = new THREE.Box3().setFromObject(c);
+  const cam = new THREE.OrthographicCamera(bb.min.x, bb.max.x, bb.max.z, bb.min.z, 0.1, 400);
+  cam.position.set(0, 200, 0); cam.up.set(0, 0, -1); cam.lookAt(0, 0, 0);
+  const rt = new THREE.WebGLRenderTarget(512, 512);
+  renderer.setRenderTarget(rt); renderer.render(sc, cam); renderer.setRenderTarget(null);
+  paveState.tex[key] = rt.texture;
+  return rt.texture;
+}
+function clearPave(){
+  for(const m of paveState.meshes){ if(m.parent) m.parent.remove(m); if(m.dispose) m.dispose(); }
+  paveState.meshes.length = 0; paveState.cfg = null;
+}
+function buildPave(cfg){
+  if(!current || currentId !== 'hive' || !current.terrain) return false;
+  const types = ['fpanel', 'vpanel', 'ipanel', 'mpanel'];
+  for(const k of types) if(!editorProtos[k]) return false;
+  clearPave();
+  ensureColliders();
+  const megaC = colliders.find(c => c.kind === 'mega');
+  const rnd = mulberry32(cfg.seed);
+  const T = cfg.tile || 5;
+  const lists = [[], [], [], []];
+  for(let z = cfg.z0; z <= cfg.z1; z += T) for(let x = cfg.x0; x <= cfg.x1; x += T){
+    const ti = (rnd() * 4) | 0, rot = ((rnd() * 4) | 0) * Math.PI / 2;   // 先耗随机数再排除，保证确定性
+    if(megaC && x > megaC.box.min.x - 2 && x < megaC.box.max.x + 2 && z > megaC.box.min.z - 2 && z < megaC.box.max.z + 2) continue;
+    lists[ti].push(x, z, rot);
+  }
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), mt = new THREE.Matrix4();
+  for(let i = 0; i < 4; i++){
+    const tex = bakePanelTop(types[i]); if(!tex){ clearPave(); return false; }
+    const geo = new THREE.BoxGeometry(T - 0.04, 1.2, T - 0.04);   // 0.04 缝隙=板与板分界暗线
+    const mat = new THREE.MeshStandardMaterial({map: tex, roughness: 0.78, metalness: 0.55});
+    const im = new THREE.InstancedMesh(geo, mat, lists[i].length / 3);
+    im.castShadow = false; im.receiveShadow = true;
+    const a = lists[i];
+    for(let j = 0, n = a.length / 3; j < n; j++){
+      const x = a[j*3], z = a[j*3+1];
+      p.set(x, current.terrain(x, z) + 0.43 - 0.6, z);   // 盒高 1.2、中心下沉：邻格地形落差≤1.2 无缝
+      e.set(0, a[j*3+2], 0); q.setFromEuler(e);
+      mt.compose(p, q, s);
+      im.setMatrixAt(j, mt);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    current.group.add(im);
+    paveState.meshes.push(im);
+  }
+  paveState.cfg = cfg;
+  shadowDirty = true;
+  return true;
+}
+function paveTopAt(x, z, fromY){
+  // 实例化地毯的解析碰撞面：无 BVH，按范围+地形直接算顶面高
+  const c = paveState.cfg;
+  if(!c || currentId !== 'hive' || !current || !current.terrain) return -Infinity;
+  if(x < c.x0 - 2 || x > c.x1 + 2 || z < c.z0 - 2 || z > c.z1 + 2) return -Infinity;
+  const t = current.terrain(x, z) + 0.43;
+  if(fromY != null && t > fromY) return -Infinity;   // 只响应自上而下的探测
+  const m = colliders.find(k => k.kind === 'mega');
+  if(m && x > m.box.min.x - 2 && x < m.box.max.x + 2 && z > m.box.min.z - 2 && z < m.box.max.z + 2) return -Infinity;
+  return t;
+}
+setInterval(() => {   // 恢复：面板原型/地形就绪后按存档种子确定性重建
+  if(currentId !== 'hive' || paveState.cfg) return;
+  let cfg = null;
+  try{ cfg = JSON.parse(localStorage.getItem(PAVE_LS())); }catch(e){}
+  if(cfg) buildPave(cfg);
+}, 2000);
+
 const _hDir = new THREE.Vector3();   // 体高横向障碍射线方向（collidePlayer 贴面路径）
 const groundRay = new THREE.Raycaster();
 groundRay.firstHitOnly = true;
@@ -3014,7 +3097,7 @@ function probeSurf(x, z, fromY, excl){
   groundRay.far = fromY + 40;
   if(!excl){
     const h = groundRay.intersectObjects(wallMeshes, false);
-    return h.length ? h[0].point.y : -Infinity;
+    return Math.max(h.length ? h[0].point.y : -Infinity, paveTopAt(x, z, fromY));
   }
   groundRay.firstHitOnly = false;
   const hs = groundRay.intersectObjects(wallMeshes, false);
@@ -3022,9 +3105,9 @@ function probeSurf(x, z, fromY, excl){
   for(const h of hs){
     let o = h.object, skip = false;
     while(o){ if(o === excl){ skip = true; break; } o = o.parent; }
-    if(!skip) return h.point.y;
+    if(!skip) return Math.max(h.point.y, paveTopAt(x, z, fromY));
   }
-  return -Infinity;
+  return paveTopAt(x, z, fromY);
 }
 let playerSupport = null;       // 当前支撑面高度（地形或建筑顶），场景切换时置 null 重定标
 function collidePlayer(p, prevX, prevZ){
@@ -4355,21 +4438,22 @@ document.getElementById('eaPaveCity').addEventListener('click', () => {
       current.group.remove(it.root); placedItems.splice(i, 1); nDel++;
     }
   }
-  // 城内范围：东西 ±800（布景区外扩 300m，再远被空气雾吞掉），南缘顶进城墙斜堤脚（+12 让板沉入坡下），
-  // 北到巨构前脸；20m 点阵逐格随机型号+随机 90° 朝向。
-  // alt=0.45-板厚 → 所有型号板顶一律 0.45m（探高会被斜堤/建筑顶带歪，定高才能保证"高度一致"）
+  // 城内范围（2026-07-20 v3）：城墙全宽（东西到墙两端），南缘顶进斜堤脚，北到 z=-600（巨构占地自动挖空）。
+  // 5m 单板 ≈ 12 万块 → GPU 实例化地毯 buildPave，存档只存种子
   const wb = new THREE.Box3().setFromObject(hiveWallGroup);
-  const megaC = colliders.find(c => c.kind === 'mega');
-  const Z1 = isFinite(wb.min.z) ? Math.floor((wb.min.z + 12) / 20) * 20 : 200;
-  const Z0 = megaC ? Math.ceil((megaC.box.max.z + 4) / 20) * 20 : -220;
-  for(let z = Z0; z <= Z1; z += 20) for(let x = -800; x <= 800; x += 20){
-    const k = types[Math.floor(Math.random()*4)];
-    jobs.push([k, x, z, Math.floor(Math.random()*4) * Math.PI/2, 1, {alt: +(0.45 - faceOfs(k)).toFixed(2)}]);
-  }
+  const cfg = {seed: (Math.random() * 1e9) | 0, tile: 5,
+    x0: isFinite(wb.min.x) ? Math.ceil(wb.min.x + 6) : -2500,
+    x1: isFinite(wb.max.x) ? Math.floor(wb.max.x - 6) : 2500,
+    z0: -600,
+    z1: isFinite(wb.min.z) ? Math.floor(wb.min.z + 12) : 200};
+  const okPave = buildPave(cfg);
+  if(okPave){ try{ localStorage.setItem(PAVE_LS(), JSON.stringify(cfg)); }catch(e){} }
   let n = 0;
   for(const j of jobs){ if(editorPlace(j[0], j[1], j[2], j[3], j[4], true, j[5])) n++; }
   editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
-  toast('铺城完成：拆旧板 ' + nDel + ' 件，新铺 ' + n + ' 件（20m 随机混拼 · 板面统一 0.45m · 含桥面/殿宇顶）');
+  const nTiles = paveState.meshes.reduce((s, m) => s + m.count, 0);
+  toast(okPave ? ('铺城完成：拆旧板 ' + nDel + ' 件，5m 混拼地毯 ' + nTiles + ' 块铺满城墙内 + 桥面/殿宇顶 ' + n + ' 件')
+               : '地毯构建未就绪（铁板模型还在加载），请稍后再点一次');
 });
 document.getElementById('eaClearPanels').addEventListener('click', () => {
   // 一键清空当前场景全部 3D 地面铁板（2026-07-19 用户要求）
@@ -4383,9 +4467,11 @@ document.getElementById('eaClearPanels').addEventListener('click', () => {
   }
   if(editSelected && PANEL_KEYS.has(editSelected.key)) editSelected = null;
   if(editGhost && editGhost.item && PANEL_KEYS.has(editGhost.key)) editGhost = null;
+  const hadPave = !!paveState.cfg;
+  if(hadPave){ clearPave(); try{ localStorage.removeItem(PAVE_LS()); }catch(e){} }
   collidersScene = null; shadowDirty = true;
   editorSave(); editorSyncUI();
-  toast(n ? '已清空 ' + n + ' 块地面铁板' : '当前场景没有已放置的铁板');
+  toast((n || hadPave) ? ('已清空 ' + n + ' 块铁板' + (hadPave ? ' + 实例化地毯' : '')) : '当前场景没有已放置的铁板');
 });
 document.getElementById('eaClearPavs').addEventListener('click', () => {
   let n = 0;
