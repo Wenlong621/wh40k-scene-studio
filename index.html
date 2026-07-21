@@ -287,6 +287,7 @@
       <div class="row"><label>仰角</label><input type="range" id="eaTilt" min="-60" max="60" value="0"><span class="val" id="eaTiltVal">0</span></div>
       <div class="row"><label>高度</label><input type="range" id="eaAlt" min="0" max="1200" value="420"><span class="val" id="eaAltVal">420</span></div>
       <div class="aspect-btns" style="margin-top:4px;">
+        <button id="eaUndo">↩ 撤销上一步</button>
         <button id="eaMove">↔ 移动</button>
         <button id="eaDel">✕ 删除</button>
         <button id="eaClear">🗑 清空布局</button>
@@ -3901,6 +3902,38 @@ function editorPlace(key, x, z, rotY=0, scale=1, silent=false, extra){
   if(!silent) editorSave();
   return it;
 }
+// ── 撤销栈（2026-07-20 用户要求：快速取消上一次放置/添加）──
+// 每个动作 = {scene, label, adds:[item], removes:[item], pave:{prev,next}}；
+// 撤销 = 移除 adds、放回 removes（root 引用还在，重新挂回场景组即可）、地毯回滚到 prev 配置。
+// 覆盖：手动放置、蜂巢布景、一键铺城、单件删除、清空铁板/体积云/布局。Ctrl+Z 同效。
+const undoStack = [];
+function pushUndo(a){
+  a.scene = currentId;
+  undoStack.push(a);
+  if(undoStack.length > 30) undoStack.shift();
+}
+function doUndo(){
+  let idx = -1;
+  for(let i = undoStack.length - 1; i >= 0; i--) if(undoStack[i].scene === currentId){ idx = i; break; }
+  if(idx < 0){ toast('当前场景没有可撤销的操作'); return; }
+  const a = undoStack.splice(idx, 1)[0];
+  for(const it of (a.adds || [])){
+    const i = placedItems.indexOf(it);
+    if(i >= 0){ current.group.remove(it.root); placedItems.splice(i, 1); }
+    if(editSelected === it) editSelected = null;
+  }
+  for(const it of (a.removes || [])){
+    if(placedItems.indexOf(it) < 0){ current.group.add(it.root); placedItems.push(it); editorApply(it); }  // 重新走摆位管线（石板路压地形等副作用一并恢复）
+  }
+  if(a.pave !== undefined){
+    clearPave();
+    if(a.pave && a.pave.prev){ buildPave(a.pave.prev); try{ localStorage.setItem(PAVE_LS(), JSON.stringify(a.pave.prev)); }catch(e){} }
+    else { try{ localStorage.removeItem(PAVE_LS()); }catch(e){} }
+  }
+  collidersScene = null; shadowDirty = true;
+  editorSave(); editorSyncUI();
+  toast('已撤销：' + a.label);
+}
 function editorRestore(){
   if(!current || editorRestored[currentId]) return;
   let list = [];
@@ -4080,6 +4113,8 @@ canvas.addEventListener('pointerup', e => {
       if(editGhost.root.userData && editGhost.root.userData.shape) it.shape = editGhost.root.userData.shape;
       if(editGhost.root.userData && editGhost.root.userData.alt != null) it.alt = +document.getElementById('eaAlt').value;
       editorApply(it); placedItems.push(it); editorSave();
+      const nbtn = document.querySelector('button[data-ea="' + it.key + '"]');
+      pushUndo({label: '放置 ' + (nbtn ? nbtn.textContent.trim() : it.key), adds: [it]});
       editSelected = it;
       const next = editorSpawn(editGhost.key, {shape:it.shape, alt:it.alt});
       if(next){
@@ -4277,8 +4312,9 @@ document.getElementById('eaHiveCity').addEventListener('click', () => {
     ['edragon', -100, -300, 0.6, 1, {alt: 150}], ['edragon', 60, -260, 2.4, 0.8, {alt: 110}],
     ['emship', 300, -650, 0.4, 1, {alt: 420, tilt: -0.12}]
   ];
-  let n = 0;
-  for(const s of spec){ if(editorPlace(s[0], s[1], s[2], s[3], s[4], true, s[5])) n++; }
+  let n = 0; const added = [];
+  for(const s of spec){ const it2 = editorPlace(s[0], s[1], s[2], s[3], s[4], true, s[5]); if(it2){ n++; added.push(it2); } }
+  if(added.length) pushUndo({label: '蜂巢城布景（' + n + ' 件）', adds: added});
   editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
   toast('蜂巢城布景完成：' + n + ' 件（可继续单独调整每一件）');
 });
@@ -4334,16 +4370,24 @@ document.getElementById('eaDel').addEventListener('click', () => {
   const wasSlab = editSelected.key === 'pavSlab';
   current.group.remove(editSelected.root);
   placedItems.splice(placedItems.indexOf(editSelected), 1);
+  pushUndo({label: '删除 ' + editSelected.key, removes: [editSelected]});
   editSelected = null; editorSave(); editorSyncUI();
   if(wasSlab) rebuildPavFlats();   // 石板路删掉后地形恢复起伏
 });
+document.getElementById('eaUndo').addEventListener('click', doUndo);
+window.addEventListener('keydown', e => {   // Ctrl+Z 同效（仅造景模式下拦截）
+  if(editorOn && (e.ctrlKey || e.metaKey) && e.code === 'KeyZ'){ e.preventDefault(); doUndo(); }
+});
 document.getElementById('eaClear').addEventListener('click', () => {
+  const removed = [];
   for(let i=placedItems.length-1; i>=0; i--){
     if(placedItems[i].scene === currentId){
       current.group.remove(placedItems[i].root);
+      removed.push(placedItems[i]);
       placedItems.splice(i, 1);
     }
   }
+  if(removed.length) pushUndo({label: '清空布局（' + removed.length + ' 件）', removes: removed});
   editSelected = null; rebuildPavFlats(); editorSave(); editorSyncUI();
 });
 /* 数值直改：点击滑杆旁的数字 → 变输入框，回车/失焦提交（Esc 取消）。
@@ -4431,11 +4475,12 @@ document.getElementById('eaPaveCity').addEventListener('click', () => {
     jobs.push([gk, g2.x, g2.z, g2.rotY || 0, 2, {alt: +(h + 0.35 - faceOfs(gk)).toFixed(2)}]);
   }
   // ① 城内地面：先拆旧城面板（贴地 alt==null 或嵌入 alt<0；桥面/殿宇顶/悬浮平台 alt>0 保留）
-  let nDel = 0;
+  const prevPave = paveState.cfg;   // 撤销回滚用：本次点击前的地毯配置
+  let nDel = 0; const delList = [];
   for(let i = placedItems.length - 1; i >= 0; i--){
     const it = placedItems[i];
     if(it.scene === 'hive' && PANEL_KEYS.has(it.key) && (it.alt == null || it.alt < 0)){
-      current.group.remove(it.root); placedItems.splice(i, 1); nDel++;
+      current.group.remove(it.root); placedItems.splice(i, 1); nDel++; delList.push(it);
     }
   }
   // 城内范围（2026-07-20 v3）：城墙全宽（东西到墙两端），南缘顶进斜堤脚，北到 z=-600（巨构占地自动挖空）。
@@ -4448,8 +4493,10 @@ document.getElementById('eaPaveCity').addEventListener('click', () => {
     z1: isFinite(wb.min.z) ? Math.floor(wb.min.z + 12) : 200};
   const okPave = buildPave(cfg);
   if(okPave){ try{ localStorage.setItem(PAVE_LS(), JSON.stringify(cfg)); }catch(e){} }
-  let n = 0;
-  for(const j of jobs){ if(editorPlace(j[0], j[1], j[2], j[3], j[4], true, j[5])) n++; }
+  let n = 0; const added = [];
+  for(const j of jobs){ const it2 = editorPlace(j[0], j[1], j[2], j[3], j[4], true, j[5]); if(it2){ n++; added.push(it2); } }
+  if(okPave || delList.length || added.length)
+    pushUndo({label: '一键铺城', adds: added, removes: delList, pave: okPave ? {prev: prevPave, next: cfg} : undefined});
   editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
   const nTiles = paveState.meshes.reduce((s, m) => s + m.count, 0);
   toast(okPave ? ('铺城完成：拆旧板 ' + nDel + ' 件，5m 混拼地毯 ' + nTiles + ' 块铺满城墙内 + 桥面/殿宇顶 ' + n + ' 件')
@@ -4457,18 +4504,19 @@ document.getElementById('eaPaveCity').addEventListener('click', () => {
 });
 document.getElementById('eaClearPanels').addEventListener('click', () => {
   // 一键清空当前场景全部 3D 地面铁板（2026-07-19 用户要求）
-  let n = 0;
+  let n = 0; const removed = [];
   for(let i = placedItems.length - 1; i >= 0; i--){
     const it = placedItems[i];
     if(it.scene === currentId && PANEL_KEYS.has(it.key)){
       current.group.remove(it.root);
-      placedItems.splice(i, 1); n++;
+      placedItems.splice(i, 1); n++; removed.push(it);
     }
   }
   if(editSelected && PANEL_KEYS.has(editSelected.key)) editSelected = null;
   if(editGhost && editGhost.item && PANEL_KEYS.has(editGhost.key)) editGhost = null;
-  const hadPave = !!paveState.cfg;
+  const hadPave = !!paveState.cfg, prevPave = paveState.cfg;
   if(hadPave){ clearPave(); try{ localStorage.removeItem(PAVE_LS()); }catch(e){} }
+  if(n || hadPave) pushUndo({label: '清空铁板', removes: removed, pave: hadPave ? {prev: prevPave, next: null} : undefined});
   collidersScene = null; shadowDirty = true;
   editorSave(); editorSyncUI();
   toast((n || hadPave) ? ('已清空 ' + n + ' 块铁板' + (hadPave ? ' + 实例化地毯' : '')) : '当前场景没有已放置的铁板');
@@ -4490,14 +4538,15 @@ document.getElementById('eaClearPavs').addEventListener('click', () => {
   toast(n ? '已清空 ' + n + ' 块地面贴皮' : '当前场景没有已放置的贴皮');
 });
 document.getElementById('eaClearClouds').addEventListener('click', () => {
-  let n = 0;
+  let n = 0; const removed = [];
   for(let i=placedItems.length-1; i>=0; i--){
     const it = placedItems[i];
     if(it.scene === currentId && it.key && it.key.startsWith('cloud')){
       current.group.remove(it.root);
-      placedItems.splice(i, 1); n++;
+      placedItems.splice(i, 1); n++; removed.push(it);
     }
   }
+  if(n) pushUndo({label: '清空体积云（' + n + ' 朵）', removes: removed});
   if(editSelected && editSelected.key && editSelected.key.startsWith('cloud')) editSelected = null;
   if(editGhost && editGhost.item && editGhost.key && editGhost.key.startsWith('cloud')) editGhost = null;  // 正在移动的云被清掉，幽灵必须一并取消
   editorSave(); editorSyncUI();
