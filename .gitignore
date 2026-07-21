@@ -1,0 +1,19 @@
+# 高模原件（1.4G，仅本地做减面用，运行不需要）
+assets/orig_hi/
+
+# QC 验收截图（可随时重新生成）
+_verify/
+
+# 中间处理备份 GLB（运行时 index.html 不引用）
+assets/marine_armor_prev.glb
+assets/marine_armor_rig_soft.glb
+assets/marine_armor_rig_soft2.glb
+assets/marine_armor_static.glb
+assets/marine_armor2_rig_soft.glb
+assets/marine_armor2_static.glb
+assets/marine_fps_old.glb
+assets/marine_power_rig_soft.glb
+assets/marine_power_static.glb
+
+# 录屏产物
+*.webm
