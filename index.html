@@ -264,6 +264,7 @@
         <button data-ea="ealien2">🦂 异形巨兽</button>
         <button data-ea="ealien3">🕷 异形凶兽</button>
         <button id="eaSwarmGate">🐜 虫群压城</button>
+        <button id="eaSiegeWaves">⚔ 分股攻势</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">地面铁板（3D 实体）</div>
       <div class="aspect-btns hscroll" style="margin-top:4px;">
@@ -4358,6 +4359,69 @@ document.getElementById('eaSwarmGate').addEventListener('click', () => {
   for(const s of ships){ s.x = GATE_X + 15; s.z = 300; s.alt = 320; s.rotY = -Math.PI/2; s.tilt = -0.16; editorApply(s); }
   editorSave(); editorSyncUI();
   toast('虫群压城：' + swarm.length + ' 只列阵城门前' + (ships.length ? '，母舰压阵' : ''));
+});
+document.getElementById('eaSiegeWaves').addEventListener('click', () => {
+  // 一键"分股攻势"（2026-07-21 用户设计需求）：城墙外新增一整场进攻——哥特废墟集结地(南 z≈750-950)
+  // → 三股地面纵队（中路直扑城门 x=-20 + 东西两翼包抄）+ 3 头巨龙低空掩护 + 母舰压阵，
+  // 进攻路线沿途铺灰色战尘烟雾。全员朝各自纵队的城墙突破口行进。可重复点击叠加波次，可撤销。
+  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
+  const FACE = {edragon:Math.PI/2, ealien2:Math.PI/2, ealien3:Math.PI/2,
+                ealien:-Math.PI/2, emonster:Math.PI, edino:Math.PI};
+  const heading = (x, z, tx, tz) => Math.atan2(-(tx - x), -(tz - z));   // 面朝行进方向（FACE 基准=面朝-Z）
+  const jit = a => a + (Math.random() - 0.5) * 14;
+  // [key, x, z, scale, 目标点 or null(废墟/烟雾), extra]
+  const spec = [
+    // ── 哥特废墟集结地（进攻发起点）──
+    ['gruin', -100, 950, 1.4, null, {ry: 0.15}], ['gruin', -320, 860, 1.2, null, {ry: 0.4}],
+    ['gruin', 120, 820, 1.0, null, {ry: -0.5}], ['gruin', -620, 780, 0.9, null, {ry: 0.8}],
+    ['gruin', 420, 740, 0.8, null, {ry: -0.9}],
+    // ── 中路主攻（废墟→城门 x=-20）：巨兽殿后、猛兽居中、异形前锋（体型放大：远景可辨军势）──
+    ['ealien2', -60, 700, 1.8, [-20, 140]], ['ealien3', 30, 640, 1.7, [-20, 140]],
+    ['ealien3', -70, 480, 1.6, [-20, 140]], ['emonster', -120, 560, 1.5, [-20, 140]],
+    ['edino', 60, 520, 1.6, [-20, 140]], ['edino', 80, 430, 1.5, [-20, 140]],
+    ['ealien', -30, 450, 1.4, [-20, 140]], ['ealien', -90, 400, 1.3, [-20, 140]],
+    ['ealien', 40, 380, 1.3, [-20, 140]], ['ealien', -110, 330, 1.3, [-20, 140]],
+    ['edino', -10, 300, 1.55, [-20, 140]], ['emonster', -60, 250, 1.45, [-20, 140]],
+    ['ealien', 0, 200, 1.25, [-20, 140]],
+    // ── 东股包抄（东废墟→东墙段 x=380）──
+    ['ealien3', 400, 660, 1.65, [380, 150]], ['edino', 350, 560, 1.5, [380, 150]],
+    ['emonster', 330, 480, 1.45, [380, 150]], ['ealien', 420, 470, 1.35, [380, 150]],
+    ['emonster', 380, 380, 1.5, [380, 150]], ['ealien', 350, 290, 1.3, [380, 150]],
+    ['ealien2', 410, 240, 1.7, [380, 150]], ['ealien', 440, 340, 1.25, [380, 150]],
+    ['ealien', 390, 180, 1.25, [380, 150]],
+    // ── 西股包抄（西废墟→西墙段 x=-560）──
+    ['ealien2', -600, 690, 1.75, [-560, 150]], ['emonster', -540, 590, 1.5, [-560, 150]],
+    ['ealien', -640, 500, 1.35, [-560, 150]], ['edino', -580, 410, 1.55, [-560, 150]],
+    ['edino', -500, 470, 1.5, [-560, 150]], ['ealien', -520, 320, 1.3, [-560, 150]],
+    ['ealien3', -590, 260, 1.65, [-560, 150]], ['ealien', -610, 360, 1.25, [-560, 150]],
+    ['ealien', -550, 185, 1.25, [-560, 150]],
+    // ── 空中掩护 + 母舰压阵 ──
+    ['edragon', -150, 620, 1.35, [-20, 140], {alt: 130}], ['edragon', 350, 430, 1.2, [380, 150], {alt: 95}],
+    ['edragon', -560, 350, 1.25, [-560, 150], {alt: 105}],
+    ['emship', -60, 850, 1.0, [-20, 140], {alt: 400, tilt: -0.1}],
+    // ── 进攻路线战尘（灰色烟雾）──
+    ['cloudGray', -40, 760, 2.2, null, {alt: 30}], ['cloudGray', -70, 520, 1.8, null, {alt: 22}],
+    ['cloudGray', 10, 340, 1.6, null, {alt: 18}], ['cloudGray', -30, 210, 1.5, null, {alt: 15}],
+    ['cloudGray', 400, 610, 1.7, null, {alt: 24}], ['cloudGray', 370, 330, 1.5, null, {alt: 16}],
+    ['cloudGray', -590, 640, 1.7, null, {alt: 24}], ['cloudGray', -560, 300, 1.5, null, {alt: 16}],
+    ['cloudGray', 150, 900, 2.5, null, {alt: 60}], ['cloudGray', -400, 900, 2.4, null, {alt: 55}]
+  ];
+  let n = 0; const added = [];
+  for(const s of spec){
+    const key = s[0], x = key === 'gruin' || key === 'cloudGray' ? s[1] : jit(s[1]),
+          z = key === 'gruin' || key === 'cloudGray' ? s[2] : jit(s[2]);
+    const ex = s[5] || {};
+    let ry = ex.ry || 0;
+    if(s[4]) ry = (FACE[key] ?? 0) + heading(x, z, s[4][0], s[4][1]) + (Math.random() - 0.5) * 0.2;
+    const extra = {};
+    if(ex.alt != null) extra.alt = ex.alt;
+    if(ex.tilt != null) extra.tilt = ex.tilt;
+    const it2 = editorPlace(key, +x.toFixed(1), +z.toFixed(1), ry, s[3], true, extra);
+    if(it2){ n++; added.push(it2); }
+  }
+  if(added.length) pushUndo({label: '分股攻势（' + n + ' 件）', adds: added});
+  editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
+  toast('分股攻势就位：' + n + ' 件——废墟集结 · 中路强攻 + 两翼包抄 · 巨龙掩护 · 母舰压阵 · 战尘沿线');
 });
 document.getElementById('eaMove').addEventListener('click', () => {
   if(!editSelected){ toast('先点击选中一个已放置的物体'); return; }
