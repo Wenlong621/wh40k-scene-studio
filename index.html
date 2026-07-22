@@ -1158,7 +1158,7 @@ function injectAerialFog(m){
   float fAmt = (fA / fB) * exp(-cameraPosition.y * fB) * (1.0 - exp(-fDist * fRy * fB)) / fRy;
   float fF = clamp(1.0 - exp(-max(fAmt, 0.0)), 0.0, 1.0);
   float fSun = pow(max(dot(fRd, vec3(0.387, 0.423, 0.819)), 0.0), 7.0);   // 朝日内散射（仰角 25°，与穹顶亮扇区/主光同方位）
-  vec3 fCol = mix(vec3(0.295, 0.32, 0.36), vec3(0.86, 0.90, 0.96), fSun);
+  vec3 fCol = mix(vec3(0.35, 0.325, 0.295), vec3(1.0, 0.92, 0.78), fSun);
   gl_FragColor.rgb = mix(gl_FragColor.rgb, fCol, fF);
 }
 #include <dithering_fragment>`);
@@ -1168,7 +1168,7 @@ function injectAerialFog(m){
 /* 精灵（云/烟）无法走材质注入（Sprite 顶点着色器无 project_vertex 世界坐标链），
    用 JS 每帧镜像同一公式：颜色向雾色收敛 + 不透明度乘透射率——远处云烟同样融进茫茫雾里 */
 const _fogCam = new THREE.Vector3(), _fogDv = new THREE.Vector3(), _fogTmpC = new THREE.Color();
-const _fogColA = new THREE.Color(0.295, 0.32, 0.36), _fogColB = new THREE.Color(0.86, 0.90, 0.96);
+const _fogColA = new THREE.Color(0.35, 0.325, 0.295), _fogColB = new THREE.Color(1.0, 0.92, 0.78);
 function spriteFogAmt(sp, baseCol){
   sp.getWorldPosition(_fogDv).sub(_fogCam);
   const d = Math.max(_fogDv.length(), 0.001);
@@ -1335,14 +1335,14 @@ function buildHive(){
   // 手绘黄昏烟霾天幕：暗烟云 + 受光云 + 地平亮带 + 残阳光斑
   // 穹顶 4000（2026-07-14 随地图扩到 8000 同步放大）：完整包住 1000m 巨构与整条城墙排
   const hiveDome = paintedSky(4000, (ctx, W, H) => {
-    // 基础渐变：阴天灰蓝（2026-07-19 参考图冷色重制；亮斑只允许出现在日光扇区）
-    skyGrad(ctx, W, H, [[0,'#22262c'],[0.30,'#3a4048'],[0.44,'#4c525c'],
-      [0.50,'#5a616c'],[0.58,'#555c68'],[0.72,'#4b525e'],[1,'#404650']]);
-    // 高空乌云：拉长条带加厚（参考图的重压云层感）
-    skyStrata(ctx, W, H*0.22, H*0.11, 90, '30,33,39', 0.32, null, 0, 3.4);
-    skyStrata(ctx, W, H*0.35, H*0.06, 66, '35,38,44', 0.24, null, 0, 2.2);
+    // 基础渐变：暖调阴天（2026-07-21 回暖重制；亮斑只允许出现在日光扇区）
+    skyGrad(ctx, W, H, [[0,'#2b2620'],[0.30,'#4b4336'],[0.44,'#615546'],
+      [0.50,'#736553'],[0.58,'#6a5c4a'],[0.72,'#5a4d3e'],[1,'#4c4234']]);
+    // 高空乌云：拉长条带加厚（重压云层感，偏暖棕）
+    skyStrata(ctx, W, H*0.22, H*0.11, 90, '40,35,29', 0.32, null, 0, 3.4);
+    skyStrata(ctx, W, H*0.35, H*0.06, 66, '48,42,34', 0.24, null, 0, 2.2);
     // 地平线暗层积条带（全环）
-    skyStrata(ctx, W, H*0.425, H*0.055, 100, '40,44,51', 0.28);
+    skyStrata(ctx, W, H*0.425, H*0.055, 100, '56,49,40', 0.28);
     // —— 日光扇区：唯一的亮区（×3 wrap 补绘，否则辉光在画布边被裁出垂直接缝）——
     // 2026-07-14 太阳抬高：仰角 13°→25°，扇区中心从地平线（0.505H）上移到 0.36H（v=0.5-25/180），色偏白
     const sx = W*0.32, sy = H*0.505, sunY = H*0.36;
@@ -1350,15 +1350,15 @@ function buildHive(){
       const gx2 = sx + gdx;
       ctx.save(); ctx.translate(gx2, sunY); ctx.scale(2.2, 1); ctx.translate(-gx2, -sunY);
       const glow = ctx.createRadialGradient(gx2, sunY, 8, gx2, sunY, 330);
-      glow.addColorStop(0, 'rgba(226,233,242,0.42)');
-      glow.addColorStop(0.45, 'rgba(196,206,220,0.18)');
-      glow.addColorStop(1, 'rgba(196,206,220,0)');
+      glow.addColorStop(0, 'rgba(255,224,168,0.50)');
+      glow.addColorStop(0.45, 'rgba(240,205,150,0.20)');
+      glow.addColorStop(1, 'rgba(240,205,150,0)');
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx2, sunY, 330, 0, 7); ctx.fill();
       ctx.restore();
     }
-    // 扇区内被日光照亮的地平薄亮线（银灰）
-    skyStrata(ctx, W, H*0.465, H*0.030, 46, '204,213,226', 0.20, sx, W*0.13);
-    skyStrata(ctx, W, H*0.487, H*0.013, 30, '222,230,240', 0.16, sx, W*0.10);
+    // 扇区内被日光照亮的地平薄亮线（金黄）
+    skyStrata(ctx, W, H*0.465, H*0.030, 46, '238,205,150', 0.24, sx, W*0.13);
+    skyStrata(ctx, W, H*0.487, H*0.013, 30, '250,222,170', 0.20, sx, W*0.10);
     // 背日侧地平再压暗（对侧 u±0.5）
     for(const dx of [W*0.5, -W*0.5]){
       const ox = sx + dx;
@@ -1371,9 +1371,9 @@ function buildHive(){
     }
     // 日盘本体（随扇区上移到 0.36H，色偏白）
     const sg = ctx.createRadialGradient(W*0.32, H*0.36, 0, W*0.32, H*0.36, 190);
-    sg.addColorStop(0, 'rgba(238,243,250,0.62)');
-    sg.addColorStop(0.3, 'rgba(210,219,232,0.24)');
-    sg.addColorStop(1, 'rgba(195,205,220,0)');
+    sg.addColorStop(0, 'rgba(255,240,205,0.70)');
+    sg.addColorStop(0.3, 'rgba(250,216,158,0.30)');
+    sg.addColorStop(1, 'rgba(240,202,142,0)');
     ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(W*0.32, H*0.36, 190, 0, 7); ctx.fill();
   });
   // 天幕也吃同一套高度雾：低角度天空被雾吞掉、与远景建筑/地面收敛到同一雾色，
@@ -1382,8 +1382,8 @@ function buildHive(){
   g.add(hiveDome);
   // 残阳辉光（与主光同方向，逆光氛围）
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:glowTex, color:0xdfe7f2, blending:THREE.AdditiveBlending,
-    depthWrite:false, transparent:true, opacity:0.38, fog:false}));
+    map:glowTex, color:0xffdfad, blending:THREE.AdditiveBlending,
+    depthWrite:false, transparent:true, opacity:0.50, fog:false}));
   // 贴到穹顶皮附近（r≈3700，穹顶 4000）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
   // 仰角 25°：位置 = (0.427,0.905)水平向 × 3700cos25° + y=3700sin25°，高阳日盘略收小
   sunGlow.scale.set(1800, 1800, 1); sunGlow.position.set(1432, 1564, 3031); g.add(sunGlow);
@@ -1443,7 +1443,7 @@ function buildHive(){
   if(GROUND_PLAIN){
     // 纯土色：无贴图、无花纹、无顶点色（起伏地形/阴影/高度雾照常）。
     // 暖色日光+调色会把红抬起来，albedo 压低红分量才出"土黄"而不是红陶土
-    groundM = mat({color:0x413f3c, roughness:1});   // 深冷灰岩尘（与铁板甲板融合；旧土黄 0x615442）
+    groundM = mat({color:0x564a3b, roughness:1});   // 暖土黄岩尘（2026-07-21 回暖；冷版深灰 0x413f3c）
   } else {
   // ① 顶点色宏观变化：焦黑烧灼带 / 灰烬浅斑 / 锈渍偏色 + 低洼沉暗，打破 3km 单色
   const vcol = new Float32Array(gPos.count*3);
@@ -1623,8 +1623,8 @@ function buildHive(){
 
   // 单一日光源：低角度残阳作唯一主光（与天幕残阳同向），环境光压到只托底影调——
   // 受光面/背光面拉开反差才有"日照感"；旧版 hemi 3.4 + 南侧补光 = 四面都亮的棚拍光，已删
-  const hemi = new THREE.HemisphereLight(0x8d9aa8, 0x23262b, 1.6); g.add(hemi);  // 阴天漫射托底（冷色重制；旧 0xcf9468/0x1c1410/1.0）
-  const sun = new THREE.DirectionalLight(0xd9e2ec, 6.2);   // 阴天银灰主光（2026-07-19 参考图冷色重制；旧金色暖白 0xffd6a6/7.0）
+  const hemi = new THREE.HemisphereLight(0xc9b39a, 0x261e15, 1.8); g.add(hemi);  // 暖调漫射托底（2026-07-21 回暖重制；冷版 0x8d9aa8/0x23262b/1.6）
+  const sun = new THREE.DirectionalLight(0xffd9ab, 7.5);   // 金色暖阳主光（2026-07-21 回暖+提亮；冷版银灰 0xd9e2ec/6.2）
   // 光源方位对齐穹顶亮黄贴图：u=0.32 → 世界方向 (+0.427,+0.905)=东南偏南，仰角 ~13°。
   // 全图阴影：光源位拉到地图外（东南上方 4200m 处），正交盒 ±2900 罩住整张 5200m 地面，
   // 8192² 阴影贴图 ≈0.71m/texel（若显卡吃力可降回 4096）
