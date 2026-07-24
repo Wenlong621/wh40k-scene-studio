@@ -250,6 +250,7 @@
         <button data-ea="fgate">🚧 要塞大门</button>
         <button data-ea="knight">🛡 装甲骑士像</button>
         <button data-ea="gcath3">🏰 巨构教堂</button>
+        <button data-ea="gdoor2">⛩ 圣殿门廊</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">角色</div>
@@ -2756,6 +2757,7 @@ loadEditorProp('pdoctor',  'assets/plague_doctor.glb',     12, false, '瘟疫医
 loadEditorProp('fgate',    'assets/fortress_gate2.glb',    55, true,  '要塞大门');   // 2026-07-23 入库：方占地必须 byWidth（否则被 Z-up 扶正放倒），55m 占地≈31m 高
 loadEditorProp('knight',   'assets/armored_knight.glb',    14, false, '装甲骑士像'); // 2026-07-23 入库：14m 纪念雕像级
 loadEditorProp('gcath3',   'assets/gothic_cathedral3.glb', 200, false, '巨构教堂');  // 2026-07-23 入库：巨构级 200m 高（0.15 减面 291k 面，缩放可至千米级）
+loadEditorProp('gdoor2',   'assets/gothic_cathedral_doorway.glb', 50, false, '圣殿门廊'); // 2026-07-23 入库：50m 高教堂门廊立面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2778,7 +2780,7 @@ const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 
 // 建筑键集：放置时不吸附堆叠（直接落地面，可互相穿模同平面组合），高度滑杆可悬浮（2026-07-14 用户设定）
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
-  'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3']);
+  'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2']);
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k);   // 高度滑杆生效的键
 // 3D 地面铁板键集：缩放语义=拼贴数量（N×N 阵列，单块保持原生尺寸，最小 1 块）
 const PANEL_KEYS = new Set(['vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor']);
