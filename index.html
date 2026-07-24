@@ -1339,8 +1339,8 @@ function buildCathedral(){
 function buildHive(){
   const g = new THREE.Group();
   // 手绘黄昏烟霾天幕：暗烟云 + 受光云 + 地平亮带 + 残阳光斑
-  // 穹顶 4000（2026-07-14 随地图扩到 8000 同步放大）：完整包住 1000m 巨构与整条城墙排
-  const hiveDome = paintedSky(4000, (ctx, W, H) => {
+  // 穹顶 8000（2026-07-23 随地图扩到 16000 同步放大）：完整包住 1000m 巨构与整条城墙排
+  const hiveDome = paintedSky(8000, (ctx, W, H) => {
     // 基础渐变：暖调阴天（2026-07-21 回暖重制；亮斑只允许出现在日光扇区）
     skyGrad(ctx, W, H, [[0,'#2b2620'],[0.30,'#4b4336'],[0.44,'#615546'],
       [0.50,'#736553'],[0.58,'#6a5c4a'],[0.72,'#5a4d3e'],[1,'#4c4234']]);
@@ -1390,9 +1390,9 @@ function buildHive(){
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
     map:glowTex, color:0xffdfad, blending:THREE.AdditiveBlending,
     depthWrite:false, transparent:true, opacity:0.50, fog:false}));
-  // 贴到穹顶皮附近（r≈3700，穹顶 4000）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
-  // 仰角 25°：位置 = (0.427,0.905)水平向 × 3700cos25° + y=3700sin25°，高阳日盘略收小
-  sunGlow.scale.set(1800, 1800, 1); sunGlow.position.set(1432, 1564, 3031); g.add(sunGlow);
+  // 贴到穹顶皮附近（r≈7400，穹顶 8000，2026-07-23 扩图×2 同步翻倍）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
+  // 仰角 25°：位置 = (0.427,0.905)水平向 × 7400cos25° + y=7400sin25°，尺寸同倍放大保持视角大小
+  sunGlow.scale.set(3600, 3600, 1); sunGlow.position.set(2864, 3128, 6062); g.add(sunGlow);
 
   // 起伏地形：出生点与柱廊带压平，越远丘壑越大；漫游时镜头贴地起伏
   const terrain = (x, z) => {
@@ -1420,7 +1420,7 @@ function buildHive(){
     return h;
   };
   // 大地面：8000×8000（2026-07-14 扩图：城墙 5200 排两端各留 ~1400m 余量，边界不再切墙头）
-  const G_SIZE = 8000, G_SEG = 380;
+  const G_SIZE = 16000, G_SEG = 560;   // 2026-07-23 扩图×2（8000→16000）；网格 380→560 控制顶点量，格距 21→28.6m 远丘略粗（雾内不可辨）
   const gGeo = new THREE.PlaneGeometry(G_SIZE, G_SIZE, G_SEG, G_SEG);
   gGeo.rotateX(-Math.PI/2);
   const gPos = gGeo.attributes.position;
