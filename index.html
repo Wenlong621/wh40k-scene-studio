@@ -2782,6 +2782,11 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2']);
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k);   // 高度滑杆生效的键
+// 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
+function updateScaleMax(key){
+  const el = document.getElementById('eaScale');
+  if(el) el.max = (key && BUILDING_KEYS.has(key) && !PANEL_KEYS.has(key)) ? 1000 : 500;
+}
 // 3D 地面铁板键集：缩放语义=拼贴数量（N×N 阵列，单块保持原生尺寸，最小 1 块）
 const PANEL_KEYS = new Set(['vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor']);
 // 铁板嵌入式贴面（2026-07-19）：贴地放置时板体自动沉入地面，只露 0.45m 板面（低于 0.6m 登步上限），
@@ -4035,6 +4040,7 @@ function editorSyncUI(){
     b.classList.toggle('active', b.dataset.ea === editKey));
   if(editSelected && !editSelected.sys && editSelected.scene !== currentId) editSelected = null;
   if(editSelected){
+    updateScaleMax(editSelected.key);   // 先调上限再写值，否则 >5× 的建筑会被旧上限截断
     document.getElementById('eaScale').value = Math.round(editSelected.scale*100);
     document.getElementById('eaScaleVal').textContent = editSelected.scale.toFixed(2);
     const deg = Math.round(((editSelected.rotY*180/Math.PI)%360+360)%360);
@@ -4226,6 +4232,7 @@ document.getElementById('editorPanel').addEventListener('click', e => {   // 分
   if(!editorProto(k)){ toast('该资产还未加载完成'); return; }
   editorCancelGhost();
   editKey = k;
+  updateScaleMax(k);
   const root = editorSpawn(k);
   if(!panelGrid(root, k, +document.getElementById('eaScale').value/100))
     root.scale.setScalar(+document.getElementById('eaScale').value/100);
