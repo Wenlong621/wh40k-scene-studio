@@ -295,6 +295,7 @@
       <div class="row"><label>高度</label><input type="range" id="eaAlt" min="0" max="1200" value="420"><span class="val" id="eaAltVal">420</span></div>
       <div class="aspect-btns" style="margin-top:4px;">
         <button id="eaUndo">↩ 撤销上一步</button>
+        <button id="eaCopy">📋 复制</button>
         <button id="eaMove">↔ 移动</button>
         <button id="eaDel">✕ 删除</button>
         <button id="eaClear">🗑 清空布局</button>
@@ -4447,6 +4448,37 @@ document.getElementById('eaMove').addEventListener('click', () => {
   editGhost = {root:editSelected.root, key:editSelected.key, item:editSelected};
   toast('移动中：在新位置点击放下');
 });
+document.getElementById('eaCopy').addEventListener('click', () => {
+  // 复制（2026-07-23 用户要求）：按选中物体的 大小/朝向/仰角/高度 生成放置幽灵跟随鼠标。
+  // 原理：放置管线读的是滑杆值——把滑杆同步成源物体参数后走标准幽灵流程，即完全复刻（且可连续放置）
+  if(!editSelected || editSelected.sys){ toast(editSelected ? '主建筑（巨构/城墙）不可复制' : '先点击选中一个已放置的物体'); return; }
+  const src = editSelected;
+  if(!editorProto(src.key)){ toast('该资产还未加载完成'); return; }
+  editorCancelGhost();
+  editKey = src.key;
+  updateScaleMax(src.key);
+  document.getElementById('eaScale').value = Math.round(src.scale*100);
+  document.getElementById('eaScaleVal').textContent = src.scale.toFixed(2);
+  const deg = Math.round(((src.rotY*180/Math.PI)%360+360)%360);
+  document.getElementById('eaRot').value = deg;
+  document.getElementById('eaRotVal').textContent = deg;
+  const tdeg = Math.round((src.tilt||0)*180/Math.PI);
+  document.getElementById('eaTilt').value = tdeg;
+  document.getElementById('eaTiltVal').textContent = tdeg;
+  const altV = src.alt != null ? Math.round(src.alt) : 0;
+  document.getElementById('eaAlt').value = altV;
+  document.getElementById('eaAltVal').textContent = altV;
+  const root = editorSpawn(src.key, {shape: src.shape, alt: src.alt != null ? src.alt : undefined});
+  if(!panelGrid(root, src.key, src.scale)) root.scale.setScalar(src.scale);
+  root.rotation.y = src.rotY;
+  applyTilt(root, src.key, src.tilt || 0);
+  const fx = yawObj.position.x - Math.sin(yaw)*60, fz = yawObj.position.z - Math.cos(yaw)*60;
+  root.position.set(fx, src.alt != null ? src.alt : editorGround(fx, fz), fz);
+  current.group.add(root);
+  editGhost = {root, key: src.key};
+  editorSyncUI();
+  toast('复制中：移动鼠标选点放置（可连续放，右键/ESC 取消）');
+});
 document.getElementById('eaDel').addEventListener('click', () => {
   if(!editSelected){ toast('先点击选中一个已放置的物体'); return; }
   if(editSelected.sys){ toast('主建筑不可删除（可移动/缩放/移出画面）'); return; }
@@ -4705,6 +4737,8 @@ window.__dbg = {keys, rig:yawObj, player, step:(dt)=>updateMove(dt), gl:renderer
   eye:()=>eyeHeight, sup:(v)=>{ if(v!==undefined) playerSupport=v; return playerSupport; },
   probe:(x,z)=>probeSurf(x,z,300),
   items:()=>placedItems.filter(it=>it.scene===currentId).map(it=>({k:it.key, x:+it.x.toFixed(1), z:+it.z.toFixed(1), y:+it.root.position.y.toFixed(2), alt:it.alt!=null?+it.alt.toFixed(1):null, s:it.scale})),
+  selectItem:(i)=>{ editSelected = placedItems.filter(it=>it.scene===currentId)[i] || null; editorSyncUI(); return editSelected ? editSelected.key : null; },   // QC：按序号选中
+  ghost:()=>editGhost ? {key: editGhost.key, moveMode: !!editGhost.item, scale: +editGhost.root.scale.x.toFixed(2), rotY: +editGhost.root.rotation.y.toFixed(3), alt: editGhost.root.userData && editGhost.root.userData.alt != null ? editGhost.root.userData.alt : null} : null,
   protos:()=>Object.keys(editorProtos),
   boom:()=>+camera.position.z.toFixed(2),
   camPos:()=>{ const v=yawObj.position.clone(); camera.getWorldPosition(v); return {x:+v.x.toFixed(2), y:+v.y.toFixed(2), z:+v.z.toFixed(2)}; },
