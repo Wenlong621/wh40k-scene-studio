@@ -2812,11 +2812,13 @@ const PANEL_KEYS = new Set(['vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor']);
 // PANEL_FACE＝各型号"板底→板面最低点"实测偏移（2026-07-20 BVH 探测标定；包围盒顶含缘饰不可用——
 // 按盒顶对齐时 vpanel 板面会压到地面下 0.2m 被泥土盖住）。对齐目标：板面最低点统一 0.45m
 const PANEL_FACE = { fpanel: 3.15, vpanel: 2.89, ipanel: 2.92, mpanel: 3.07 };
+// 2026-07-24 贴皮化：贴地铁板深埋到只露 5cm 板面（≈地表贴皮），且不再参与碰撞——角色站真实地面；
+// 悬浮(alt>0)铁板保持全厚 3D 平台并可站立
 function panelSink(key){
   if(!PANEL_KEYS.has(key)) return 0;
-  if(PANEL_FACE[key]) return PANEL_FACE[key] - 0.45;
+  if(PANEL_FACE[key]) return PANEL_FACE[key] - 0.05;
   const p = editorProtos[key];
-  return Math.max(0, ((p && p.userData.thick) || 3.2) - 0.45);
+  return Math.max(0, ((p && p.userData.thick) || 3.2) - 0.05);
 }
 // 前后仰角轴表（角色+敌对角色）：值=绕哪根局部横轴、符号让 滑杆正值=抬头/后仰。
 // 面轴 +X 的战士横轴是 Z；身长沿 Z 的巨兽横轴是 X——轴/符号均按放置实拍标定，新模型入库要重标
@@ -3014,7 +3016,10 @@ function rebuildColliders(){
   // 蒙皮角色（绑骨后）走骨骼感知粗盒——绑定姿态几何空间与渲染位置错位，BVH 贴面会打出幻影碰撞
   for(const it of placedItems){
     if(it.scene !== currentId) continue;
-    if(it.alt != null && !PANEL_KEYS.has(it.key)) continue;  // 空中体积云/悬浮件不参与碰撞；铁板例外＝悬浮平台可站立
+    if(PANEL_KEYS.has(it.key)){
+      if(it.alt == null) continue;                 // 贴地铁板=地表贴皮，不碰撞（角色站真实地面）
+    } else if(it.alt != null) continue;            // 空中体积云/悬浮件不参与碰撞；悬浮铁板=平台可站立
+
     it.root.updateWorldMatrix(true, true);
     let hasSkin = false;
     it.root.traverse(o => { if(o.isSkinnedMesh) hasSkin = true; });
@@ -3082,18 +3087,33 @@ function buildPave(cfg){
     if(megaC && x > megaC.box.min.x - 2 && x < megaC.box.max.x + 2 && z > megaC.box.min.z - 2 && z < megaC.box.max.z + 2) continue;
     lists[ti].push(x, z, rot);
   }
-  const q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), mt = new THREE.Matrix4();
+  // 2026-07-24 改贴皮：铁板不再是 3D 实体，而是贴着地形的平面贴图（法线对齐坡面 + polygonOffset 防闪面）。
+  // 不参与任何碰撞——角色站在真实地面上，贴皮只是地表纹理
+  const q = new THREE.Quaternion(), qy = new THREE.Quaternion(), e = new THREE.Euler(),
+        p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), mt = new THREE.Matrix4(),
+        up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3();
   for(let i = 0; i < 4; i++){
     const tex = bakePanelTop(types[i]); if(!tex){ clearPave(); return false; }
-    const geo = new THREE.BoxGeometry(T - 0.04, 1.2, T - 0.04);   // 0.04 缝隙=板与板分界暗线
-    const mat = new THREE.MeshStandardMaterial({map: tex, roughness: 0.78, metalness: 0.55});
+    const geo = new THREE.PlaneGeometry(T - 0.04, T - 0.04);   // 0.04 缝隙=板与板分界暗线
+    geo.rotateX(-Math.PI / 2);                                  // 躺平面朝上
+    const mat = new THREE.MeshStandardMaterial({map: tex, roughness: 0.78, metalness: 0.55,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2});
     const im = new THREE.InstancedMesh(geo, mat, lists[i].length / 3);
     im.castShadow = false; im.receiveShadow = true;
     const a = lists[i];
     for(let j = 0, n = a.length / 3; j < n; j++){
       const x = a[j*3], z = a[j*3+1];
-      p.set(x, current.terrain(x, z) + 0.43 - 0.6, z);   // 盒高 1.2、中心下沉：邻格地形落差≤1.2 无缝
-      e.set(0, a[j*3+2], 0); q.setFromEuler(e);
+      // 取 9 点局部最高地形＝贴片永不被起伏地面盖住（洼地边缘略悬 0.1-0.3m，远看无感）
+      let h = -Infinity;
+      for(const [ox, oz] of [[0,0],[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4],[-2.4,0],[2.4,0]])
+        h = Math.max(h, current.terrain(x + ox, z + oz));
+      p.set(x, h + 0.06, z);
+      // 法线对齐地形坡面（±2m 梯度采样），再叠加随机朝向
+      nrm.set((current.terrain(x - 2, z) - current.terrain(x + 2, z)) / 4, 1,
+              (current.terrain(x, z - 2) - current.terrain(x, z + 2)) / 4).normalize();
+      q.setFromUnitVectors(up, nrm);
+      e.set(0, a[j*3+2], 0); qy.setFromEuler(e);
+      q.multiply(qy);
       mt.compose(p, q, s);
       im.setMatrixAt(j, mt);
     }
@@ -3106,15 +3126,8 @@ function buildPave(cfg){
   return true;
 }
 function paveTopAt(x, z, fromY){
-  // 实例化地毯的解析碰撞面：无 BVH，按范围+地形直接算顶面高
-  const c = paveState.cfg;
-  if(!c || currentId !== 'hive' || !current || !current.terrain) return -Infinity;
-  if(x < c.x0 - 2 || x > c.x1 + 2 || z < c.z0 - 2 || z > c.z1 + 2) return -Infinity;
-  const t = current.terrain(x, z) + 0.43;
-  if(fromY != null && t > fromY) return -Infinity;   // 只响应自上而下的探测
-  const m = colliders.find(k => k.kind === 'mega');
-  if(m && x > m.box.min.x - 2 && x < m.box.max.x + 2 && z > m.box.min.z - 2 && z < m.box.max.z + 2) return -Infinity;
-  return t;
+  // 2026-07-24 贴皮化：地毯不再是碰撞面（角色站真实地面），保留函数签名供 probeSurf 调用
+  return -Infinity;
 }
 setInterval(() => {   // 恢复：面板原型/地形就绪后按存档种子确定性重建
   if(currentId !== 'hive' || paveState.cfg) return;
