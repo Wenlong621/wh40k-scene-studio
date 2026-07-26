@@ -3460,6 +3460,7 @@ canvas.addEventListener('click', () => {
 document.addEventListener('pointerlockchange', () => {
   locked = document.pointerLockElement === canvas;
   document.getElementById('lockHint').style.opacity = locked ? 0 : 1;
+  if(!locked) clearKeys();   // 2026-07-26 修漂移：ESC 退出锁定会吞方向键 keyup，残留按下态=永久漂移
 });
 
 // 三人称下鼠标滚轮＝调节三人称距（推近/拉远，复用滑杆管线保持 UI 同步）
@@ -3501,7 +3502,11 @@ function setKey(e, down){
 }
 addEventListener('keydown', e => setKey(e, true));
 addEventListener('keyup',   e => setKey(e, false));
-addEventListener('blur', () => { for(const k in keys) keys[k] = false; });
+// 卡键防线（2026-07-26）：任何会打断 keyup 送达的时刻都清空按键状态，杜绝"松了键还在漂移"
+function clearKeys(){ for(const k in keys) keys[k] = false; }
+addEventListener('blur', clearKeys);
+document.addEventListener('visibilitychange', () => { if(document.hidden) clearKeys(); });
+addEventListener('keydown', e => { if(e.key === 'Escape') clearKeys(); });
 
 /* 录像模式（三态）：点「🎬 录像模式」武装 → 画幅左上角出现「开始录像（按空格）」标识 →
    空格开始（标识变「● 录像中 m:ss」计时闪烁）→ 空格停止并自动下载 .webm。未武装时空格不响应。
