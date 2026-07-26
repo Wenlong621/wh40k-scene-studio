@@ -1163,7 +1163,12 @@ function injectAerialFog(m){
     if(prev) prev(s);
     s.uniforms.uMegaFog = megaFogU;
     s.vertexShader = 'varying vec3 vMegaW;\n' + s.vertexShader.replace('#include <project_vertex>',
-      '#include <project_vertex>\n  vMegaW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      `#include <project_vertex>
+#ifdef USE_INSTANCING
+  vMegaW = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+#else
+  vMegaW = (modelMatrix * vec4(transformed, 1.0)).xyz;
+#endif`);
     s.fragmentShader = 'varying vec3 vMegaW;\nuniform float uMegaFog;\n' + s.fragmentShader.replace('#include <dithering_fragment>',
 `{
   vec3 fdv = vMegaW - cameraPosition;
@@ -3100,6 +3105,7 @@ function buildPave(cfg){
     geo.rotateX(-Math.PI / 2);                                  // 躺平面朝上
     const mat = new THREE.MeshStandardMaterial({map: tex, roughness: 0.78, metalness: 0.55,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2});
+    injectAerialFog(mat);   // 2026-07-26 贴皮融入高度雾（实例化世界坐标已在注入器内处理）
     const im = new THREE.InstancedMesh(geo, mat, lists[i].length / 3);
     im.castShadow = false; im.receiveShadow = true;
     const a = lists[i];
