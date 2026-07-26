@@ -252,6 +252,8 @@
         <button data-ea="gcath3">🏰 巨构教堂</button>
         <button data-ea="gdoor2">⛩ 圣殿门廊</button>
         <button data-ea="gtower">🗼 哥特塔楼</button>
+        <button data-ea="gcath4">⛪ 哥特主座</button>
+        <button data-ea="stower">🛰 科幻高塔</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">角色</div>
@@ -2761,6 +2763,8 @@ loadEditorProp('knight',   'assets/armored_knight.glb',    14, false, '装甲骑
 loadEditorProp('gcath3',   'assets/gothic_cathedral3.glb', 200, false, '巨构教堂');  // 2026-07-23 入库：巨构级 200m 高（0.15 减面 291k 面，缩放可至千米级）
 loadEditorProp('gdoor2',   'assets/gothic_cathedral_doorway.glb', 50, false, '圣殿门廊'); // 2026-07-23 入库：50m 高教堂门廊立面
 loadEditorProp('gtower',   'assets/gothic_cathedral_tower.glb',   90, false, '哥特塔楼'); // 2026-07-23 入库：90m 细高塔，精细档 0.2 减面 371k 面（BVH 贴面碰撞，镂空可穿行）
+loadEditorProp('gcath4',   'assets/gothic_cathedral4.glb',       110, false, '哥特主座'); // 2026-07-23 入库：110m 大教堂本体，精细档 0.2 减面 361k 面
+loadEditorProp('stower',   'assets/scifi_tower.glb',             100, false, '科幻高塔'); // 2026-07-23 入库：100m 科幻塔，精细档 0.2 减面 367k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2783,7 +2787,7 @@ const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 
 // 建筑键集：放置时不吸附堆叠（直接落地面，可互相穿模同平面组合），高度滑杆可悬浮（2026-07-14 用户设定）
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
-  'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower']);
+  'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower']);
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
 function updateScaleMax(key){
