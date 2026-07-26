@@ -4698,6 +4698,20 @@ document.getElementById('eaClearClouds').addEventListener('click', () => {
   toast(n ? '已清空 ' + n + ' 朵体积云' : '当前场景没有已放置的体积云');
 });
 
+// ── 布局远程修补：一次性、按补丁号幂等（用户在自己浏览器里的存档，只能靠代码补丁远程改）──
+// #1 (2026-07-24)：移除 (300,-650) 叠放的两艘虫族母舰（用户要求去掉桥边这艘；布景按钮点两次叠出）
+const LAYOUT_PATCH = 1;
+(function applyLayoutPatch(){
+  try{
+    if((+localStorage.getItem('wh40k_patch') || 0) >= LAYOUT_PATCH) return;
+    const k = 'wh40k_layout_hive';
+    const list = JSON.parse(localStorage.getItem(k) || '[]');
+    const filtered = list.filter(o => !(o.key === 'emship' && Math.abs(o.x - 300) < 5 && Math.abs(o.z + 650) < 5));
+    if(filtered.length !== list.length) localStorage.setItem(k, JSON.stringify(filtered));
+    localStorage.setItem('wh40k_patch', String(LAYOUT_PATCH));
+  }catch(e){}
+})();
+
 // ── 存档云备份：浏览器 localStorage(wh40k_*) 自动落盘到 layouts/backup.json ──
 // 意义：布局/机位收藏等只存在浏览器缓存里，清缓存或换源（localhost vs 127.0.0.1）就会丢；
 // 落盘后成为普通项目文件，可随 git 推送云端。启动时自动把磁盘备份里缺失的键恢复进浏览器。
