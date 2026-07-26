@@ -1173,8 +1173,8 @@ function injectAerialFog(m){
   float fRy = (abs(fRd.y) < 0.001) ? 0.001 : fRd.y;
   float fAmt = (fA / fB) * exp(-cameraPosition.y * fB) * (1.0 - exp(-fDist * fRy * fB)) / fRy;
   float fF = clamp(1.0 - exp(-max(fAmt, 0.0)), 0.0, 1.0);
-  float fSun = pow(max(dot(fRd, vec3(0.387, 0.423, 0.819)), 0.0), 7.0);   // 朝日内散射（仰角 25°，与穹顶亮扇区/主光同方位）
-  vec3 fCol = mix(vec3(0.35, 0.325, 0.295), vec3(1.0, 0.92, 0.78), fSun);
+  float fSun = pow(max(dot(fRd, vec3(0.327, 0.643, 0.693)), 0.0), 7.0);   // 朝日内散射（仰角 40°，与穹顶亮扇区/主光同方位）
+  vec3 fCol = mix(vec3(0.37, 0.35, 0.325), vec3(0.96, 0.92, 0.86), fSun);
   gl_FragColor.rgb = mix(gl_FragColor.rgb, fCol, fF);
 }
 #include <dithering_fragment>`);
@@ -1184,7 +1184,7 @@ function injectAerialFog(m){
 /* 精灵（云/烟）无法走材质注入（Sprite 顶点着色器无 project_vertex 世界坐标链），
    用 JS 每帧镜像同一公式：颜色向雾色收敛 + 不透明度乘透射率——远处云烟同样融进茫茫雾里 */
 const _fogCam = new THREE.Vector3(), _fogDv = new THREE.Vector3(), _fogTmpC = new THREE.Color();
-const _fogColA = new THREE.Color(0.35, 0.325, 0.295), _fogColB = new THREE.Color(1.0, 0.92, 0.78);
+const _fogColA = new THREE.Color(0.37, 0.35, 0.325), _fogColB = new THREE.Color(0.96, 0.92, 0.86);
 function spriteFogAmt(sp, baseCol){
   sp.getWorldPosition(_fogDv).sub(_fogCam);
   const d = Math.max(_fogDv.length(), 0.001);
@@ -1192,7 +1192,7 @@ function spriteFogAmt(sp, baseCol){
   const fB = 0.0055, fA = 0.0003 * fogMulCur * fogMulCur;
   const amt = (fA / fB) * Math.exp(-_fogCam.y * fB) * (1 - Math.exp(-d * ry * fB)) / ry;
   const fF = Math.min(1 - Math.exp(-Math.max(amt, 0)), 1);
-  const fSun = Math.pow(Math.max((_fogDv.x*0.387 + _fogDv.y*0.423 + _fogDv.z*0.819) / d, 0), 7);
+  const fSun = Math.pow(Math.max((_fogDv.x*0.327 + _fogDv.y*0.643 + _fogDv.z*0.693) / d, 0), 7);
   sp.material.color.copy(baseCol).lerp(_fogTmpC.copy(_fogColA).lerp(_fogColB, fSun), fF);
   return fF;
 }
@@ -1360,15 +1360,15 @@ function buildHive(){
     // 地平线暗层积条带（全环）
     skyStrata(ctx, W, H*0.425, H*0.055, 100, '56,49,40', 0.28);
     // —— 日光扇区：唯一的亮区（×3 wrap 补绘，否则辉光在画布边被裁出垂直接缝）——
-    // 2026-07-14 太阳抬高：仰角 13°→25°，扇区中心从地平线（0.505H）上移到 0.36H（v=0.5-25/180），色偏白
-    const sx = W*0.32, sy = H*0.505, sunY = H*0.36;
+    // 2026-07-24 太阳再抬高：仰角 25°→40°，扇区中心上移到 0.278H（v=0.5-40/180），色调柔化
+    const sx = W*0.32, sy = H*0.505, sunY = H*0.278;
     for(const gdx of [-W, 0, W]){
       const gx2 = sx + gdx;
       ctx.save(); ctx.translate(gx2, sunY); ctx.scale(2.2, 1); ctx.translate(-gx2, -sunY);
       const glow = ctx.createRadialGradient(gx2, sunY, 8, gx2, sunY, 330);
-      glow.addColorStop(0, 'rgba(255,224,168,0.50)');
-      glow.addColorStop(0.45, 'rgba(240,205,150,0.20)');
-      glow.addColorStop(1, 'rgba(240,205,150,0)');
+      glow.addColorStop(0, 'rgba(255,232,196,0.42)');
+      glow.addColorStop(0.45, 'rgba(244,216,176,0.17)');
+      glow.addColorStop(1, 'rgba(244,216,176,0)');
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(gx2, sunY, 330, 0, 7); ctx.fill();
       ctx.restore();
     }
@@ -1385,12 +1385,12 @@ function buildHive(){
       ctx.fillStyle = dk; ctx.beginPath(); ctx.arc(ox, sy, 330, 0, 7); ctx.fill();
       ctx.restore();
     }
-    // 日盘本体（随扇区上移到 0.36H，色偏白）
-    const sg = ctx.createRadialGradient(W*0.32, H*0.36, 0, W*0.32, H*0.36, 190);
-    sg.addColorStop(0, 'rgba(255,240,205,0.70)');
-    sg.addColorStop(0.3, 'rgba(250,216,158,0.30)');
-    sg.addColorStop(1, 'rgba(240,202,142,0)');
-    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(W*0.32, H*0.36, 190, 0, 7); ctx.fill();
+    // 日盘本体（随扇区上移到 0.278H，柔化）
+    const sg = ctx.createRadialGradient(W*0.32, H*0.278, 0, W*0.32, H*0.278, 190);
+    sg.addColorStop(0, 'rgba(255,244,222,0.60)');
+    sg.addColorStop(0.3, 'rgba(250,226,186,0.26)');
+    sg.addColorStop(1, 'rgba(244,214,168,0)');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(W*0.32, H*0.278, 190, 0, 7); ctx.fill();
   });
   // 天幕也吃同一套高度雾：低角度天空被雾吞掉、与远景建筑/地面收敛到同一雾色，
   // 剪影边界随雾浓度消融（雾天不该有清晰地平线）；仰角越高雾越薄，头顶仍见暗空
@@ -1398,11 +1398,11 @@ function buildHive(){
   g.add(hiveDome);
   // 残阳辉光（与主光同方向，逆光氛围）
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:glowTex, color:0xffdfad, blending:THREE.AdditiveBlending,
-    depthWrite:false, transparent:true, opacity:0.50, fog:false}));
-  // 贴到穹顶皮附近（r≈7400，穹顶 8000，2026-07-23 扩图×2 同步翻倍）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
-  // 仰角 25°：位置 = (0.427,0.905)水平向 × 7400cos25° + y=7400sin25°，尺寸同倍放大保持视角大小
-  sunGlow.scale.set(3600, 3600, 1); sunGlow.position.set(2864, 3128, 6062); g.add(sunGlow);
+    map:glowTex, color:0xffe6c2, blending:THREE.AdditiveBlending,
+    depthWrite:false, transparent:true, opacity:0.42, fog:false}));
+  // 贴到穹顶皮附近（r≈7400，穹顶 8000）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
+  // 仰角 40°（2026-07-24）：位置 = (0.427,0.905)水平向 × 7400cos40° + y=7400sin40°
+  sunGlow.scale.set(3600, 3600, 1); sunGlow.position.set(2420, 4757, 5130); g.add(sunGlow);
 
   // 起伏地形：出生点与柱廊带压平，越远丘壑越大；漫游时镜头贴地起伏
   const terrain = (x, z) => {
@@ -1639,12 +1639,12 @@ function buildHive(){
 
   // 单一日光源：低角度残阳作唯一主光（与天幕残阳同向），环境光压到只托底影调——
   // 受光面/背光面拉开反差才有"日照感"；旧版 hemi 3.4 + 南侧补光 = 四面都亮的棚拍光，已删
-  const hemi = new THREE.HemisphereLight(0xc9b39a, 0x261e15, 1.8); g.add(hemi);  // 暖调漫射托底（2026-07-21 回暖重制；冷版 0x8d9aa8/0x23262b/1.6）
-  const sun = new THREE.DirectionalLight(0xffd9ab, 7.5);   // 金色暖阳主光（2026-07-21 回暖+提亮；冷版银灰 0xd9e2ec/6.2）
+  const hemi = new THREE.HemisphereLight(0xcabba8, 0x2b241c, 2.3); g.add(hemi);  // 暖调漫射托底（2026-07-24 柔化：提亮填影+微降饱和；旧 0xc9b39a/0x261e15/1.8）
+  const sun = new THREE.DirectionalLight(0xffe3c4, 6.3);   // 柔和暖阳主光（2026-07-24 柔化：降强度+减金黄饱和；旧 0xffd9ab/7.5）
   // 光源方位对齐穹顶亮黄贴图：u=0.32 → 世界方向 (+0.427,+0.905)=东南偏南，仰角 ~13°。
   // 全图阴影：光源位拉到地图外（东南上方 4200m 处），正交盒 ±2900 罩住整张 5200m 地面，
   // 8192² 阴影贴图 ≈0.71m/texel（若显卡吃力可降回 4096）
-  sun.position.set(1747, 1908, 3905); sun.target.position.set(0, 0, 205); sun.castShadow = true;   // 仰角 13°→25°（y=水平距4092×tan25°）
+  sun.position.set(1747, 3434, 3905); sun.target.position.set(0, 0, 205); sun.castShadow = true;   // 仰角 25°→40°（2026-07-24 再抬高；y=水平距4092×tan40°）
   sun.shadow.mapSize.set(8192, 8192);
   Object.assign(sun.shadow.camera, {left:-2900, right:2900, top:2900, bottom:-2900, near:1, far:8200});
   sun.shadow.camera.updateProjectionMatrix();
