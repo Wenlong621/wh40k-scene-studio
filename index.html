@@ -259,6 +259,7 @@
         <button data-ea="fstair">🧗 要塞梯楼</button>
         <button data-ea="dwall">🏴 黑铁城墙</button>
         <button data-ea="tstair">🛕 神庙阶梯</button>
+        <button data-ea="icath">🏭 工业圣堂</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">角色</div>
@@ -2775,6 +2776,7 @@ loadEditorProp('sfort',    'assets/steampunk_fortress.glb',       80, false, '�
 loadEditorProp('fstair',   'assets/fortress_stairwell.glb',       45, false, '要塞梯楼'); // 2026-07-24 入库：精细档 355k 面
 loadEditorProp('dwall',    'assets/dark_fortress_wall.glb',       80, true,  '黑铁城墙'); // 2026-07-24 入库：宽墙段按占地宽，高≈57m，精细档 386k 面
 loadEditorProp('tstair',   'assets/temple_staircase.glb',         50, true,  '神庙阶梯'); // 2026-07-24 入库：长阶梯按占地宽（纵深 50m 爬升 32m），精细档 376k 面
+loadEditorProp('icath',    'assets/industrial_cathedral.glb',     90, true,  '工业圣堂'); // 2026-07-26 入库：宽体工业教堂群按占地宽（高≈60m），精细档 377k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2798,7 +2800,7 @@ const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower',
-  'ifort', 'sfort', 'fstair', 'dwall', 'tstair']);
+  'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath']);
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
 function updateScaleMax(key){
