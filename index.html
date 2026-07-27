@@ -283,6 +283,11 @@
         <button id="eaSwarmGate">🐜 虫群压城</button>
         <button id="eaSiegeWaves">⚔ 分股攻势</button>
       </div>
+      <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">我方兵种（星界军）</div>
+      <div class="aspect-btns hscroll" style="margin-top:4px;">
+        <button data-ea="msold">🪖 星界军士兵</button>
+        <button data-ea="mturret">🛡 防御炮塔</button>
+      </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">地面铁板（3D 实体）</div>
       <div class="aspect-btns hscroll" style="margin-top:4px;">
         <button data-ea="vpanel">🔩 拱纹铁板</button>
@@ -2784,6 +2789,8 @@ loadEditorProp('fstair',   'assets/fortress_stairwell.glb',       45, false, '�
 loadEditorProp('dwall',    'assets/dark_fortress_wall.glb',       80, true,  '黑铁城墙'); // 2026-07-24 入库：宽墙段按占地宽，高≈57m，精细档 386k 面
 loadEditorProp('tstair',   'assets/temple_staircase.glb',         50, true,  '神庙阶梯'); // 2026-07-24 入库：长阶梯按占地宽（纵深 50m 爬升 32m），精细档 376k 面
 loadEditorProp('icath',    'assets/industrial_cathedral.glb',     90, true,  '工业圣堂'); // 2026-07-26 入库：宽体工业教堂群按占地宽（高≈60m），精细档 377k 面
+loadEditorProp('msold',    'assets/military_soldiers.glb',       2.6, false, '星界军士兵'); // 2026-07-26 我方兵种：小队体按高 2.6m 真人比例
+loadEditorProp('mturret',  'assets/military_turret.glb',           8, true,  '防御炮塔');  // 2026-07-26 我方兵种：宽底座炮位按占地 8m
 loadEditorProp('gcath5',   'assets/gothic_cathedral5.glb',       100, true,  '哥特长殿'); // 2026-07-26 入库：纵深主导长殿按占地宽（高≈82m），精细档 388k 面
 loadEditorProp('gcath6',   'assets/gothic_cathedral6.glb',       100, false, '哥特尖殿'); // 2026-07-26 入库：高瘦立面按高 100m，精细档 368k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
@@ -2810,7 +2817,8 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower',
   'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6']);
-const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k);   // 高度滑杆生效的键
+const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
+const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
 function updateScaleMax(key){
   const el = document.getElementById('eaScale');
@@ -2836,6 +2844,7 @@ function panelSink(key){
 // 实拍标定结果：战士面朝+X→'z'；巨龙面朝+X（14.8m 是翼展沿 Z，身长沿 X）→'z'；
 // 怪物/恐龙面朝+Z→'-x'（不反号会正值低头）；异形面朝-X→'-z'
 const TILT_AXIS = { marine:'z', smarmor:'z', smpower:'z', smarmor2:'z',
+                    msold:'z', mturret:'z',   // 我方兵种（2026-07-26；如仰角方向感觉反了改 '-z'）
                     edragon:'z', emonster:'-x', ealien:'-z', edino:'-x',
                     emship:'-z',     // 母舰：舰首=触须端朝 -X，长轴沿 X（0° 贴地实拍标定）
                     ealien2:'z',     // 异形巨兽：头（红镰刃）朝 +X（0° 贴地实拍标定）
