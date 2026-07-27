@@ -3991,6 +3991,9 @@ function doUndo(){
   for(const it of (a.removes || [])){
     if(placedItems.indexOf(it) < 0){ current.group.add(it.root); placedItems.push(it); editorApply(it); }  // 重新走摆位管线（石板路压地形等副作用一并恢复）
   }
+  for(const m of (a.moves || [])){   // 移动类动作（如虫群压城重排）：回写移动前的位姿
+    if(placedItems.indexOf(m.it) >= 0){ Object.assign(m.it, m.before); editorApply(m.it); }
+  }
   if(a.pave !== undefined){
     clearPave();
     if(a.pave && a.pave.prev){ buildPave(a.pave.prev); try{ localStorage.setItem(PAVE_LS(), JSON.stringify(a.pave.prev)); }catch(e){} }
@@ -4402,7 +4405,11 @@ document.getElementById('eaSwarmGate').addEventListener('click', () => {
     if(isFinite(bb.min.x)) boxes.push({ x0: bb.min.x - 4, x1: bb.max.x + 4, z0: bb.min.z - 4, z1: bb.max.z + 4 });
   }
   const inBlock = (x, z) => boxes.some(b => x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1);
-  const GATE_X = -20, FRONT_Z = 140;
+  // 2026-07-26 重制：① 全员移动前位姿入撤销栈（此前"移动"类动作不可撤销＝用户投诉点）；
+  // ② 前沿动态实测城墙南沿（旧写死 z=140，城墙被放大/移位后阵型错位）；③ 横向间距按体型累加防叠模
+  const moves = [...swarm, ...ships].map(it => ({it, before: {x: it.x, z: it.z, rotY: it.rotY, alt: it.alt, tilt: it.tilt}}));
+  const wb = new THREE.Box3().setFromObject(hiveWallGroup);
+  const GATE_X = -20, FRONT_Z = isFinite(wb.max.z) ? wb.max.z + 25 : 140;
   const rank = {ealien3:0, ealien:1, ealien2:2, emonster:3, edino:4, edragon:5};
   swarm.sort((a, b) => (rank[a.key]||0) - (rank[b.key]||0));
   const FACE = {edragon:Math.PI/2, ealien2:Math.PI/2, ealien3:Math.PI/2,
@@ -4410,22 +4417,28 @@ document.getElementById('eaSwarmGate').addEventListener('click', () => {
   let i = 0, row = 0;
   while(i < swarm.length){
     const cols = Math.min(swarm.length - i, 3 + row);
-    const z0 = FRONT_Z + row*16 + row*row*2;
-    for(let c = 0; c < cols && i < swarm.length; c++, i++){
-      const it = swarm[i], spread = 17 + row*4;
-      let x = GATE_X + (c - (cols-1)/2)*spread + (Math.random()-0.5)*7;
-      let z = z0 + (Math.random()-0.5)*6;
+    const z0 = FRONT_Z + row*22 + row*row*2;
+    const rowUnits = swarm.slice(i, i + cols);
+    const widths = rowUnits.map(u => 14 + 12 * (u.scale || 1));   // 单位占位宽随体型
+    const total = widths.reduce((s, w) => s + w, 0);
+    let cx = GATE_X - total / 2;
+    for(let c = 0; c < rowUnits.length; c++, i++){
+      const it = rowUnits[c];
+      let x = cx + widths[c] / 2 + (Math.random() - 0.5) * 6;
+      cx += widths[c];
+      let z = z0 + (Math.random() - 0.5) * 8;
       for(let k = 0; k < 40 && inBlock(x, z); k++){ z += 4; x += (x < GATE_X ? -2 : 2); }
       it.x = x; it.z = z;
-      it.rotY = (FACE[it.key] ?? 0) + (Math.random()-0.5)*0.35;
+      it.rotY = (FACE[it.key] ?? 0) + (Math.random() - 0.5) * 0.35;
       it.alt = null; it.tilt = 0;
       editorApply(it);
     }
     row++;
   }
-  for(const s of ships){ s.x = GATE_X + 15; s.z = 300; s.alt = 320; s.rotY = -Math.PI/2; s.tilt = -0.16; editorApply(s); }
+  for(const s of ships){ s.x = GATE_X + 15; s.z = FRONT_Z + 160; s.alt = 320; s.rotY = -Math.PI/2; s.tilt = -0.16; editorApply(s); }
+  pushUndo({label: '虫群压城（' + (swarm.length + ships.length) + ' 只重排）', moves});
   editorSave(); editorSyncUI();
-  toast('虫群压城：' + swarm.length + ' 只列阵城门前' + (ships.length ? '，母舰压阵' : ''));
+  toast('虫群压城：' + swarm.length + ' 只列阵城门前' + (ships.length ? '，母舰压阵' : '') + '（可撤销）');
 });
 document.getElementById('eaSiegeWaves').addEventListener('click', () => {
   // 一键"分股攻势"（2026-07-21 用户设计需求）：城墙外新增一整场进攻——哥特废墟集结地(南 z≈750-950)
