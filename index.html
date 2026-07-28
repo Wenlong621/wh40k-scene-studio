@@ -282,6 +282,7 @@
         <button data-ea="ealien3">🕷 异形凶兽</button>
         <button id="eaSwarmGate">🐜 虫群压城</button>
         <button id="eaSiegeWaves">⚔ 分股攻势</button>
+        <button id="eaSnakeSwarm">🐛 虫潮蛇阵</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">我方兵种（星界军）</div>
       <div class="aspect-btns hscroll" style="margin-top:4px;">
@@ -2810,8 +2811,9 @@ loadEditorProp('smarmor2', 'assets/marine_armor2.glb', 2.9, false, '重甲战士
 loadEditorProp('edragon',  'assets/enemy_dragon.glb',  10,  false, '骸骨巨龙');   // 敌对角色（默认贴地，高度滑杆>0 变悬浮件）
 loadEditorProp('emonster', 'assets/enemy_monster.glb', 5,   false, '骸骨怪物');
 loadEditorProp('ealien',   'assets/enemy_alien.glb',   4,   false, '异形生物');
+loadEditorProp('ealienlo', 'assets/enemy_alien_lo.glb', 4,  false, '虫潮低模');   // 2026-07-26 蛇形虫潮专用（13k 面，无按钮，仅蛇阵按钮批量铺）
 loadEditorProp('edino',    'assets/enemy_dino.glb',    7,   false, '恐龙猛兽');
-const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 'ealien2', 'ealien3']);   // 高度滑杆可用的敌对角色
+const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 'ealien2', 'ealien3', 'ealienlo']);   // 高度滑杆可用的敌对角色
 // 建筑键集：放置时不吸附堆叠（直接落地面，可互相穿模同平面组合），高度滑杆可悬浮（2026-07-14 用户设定）
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
@@ -2845,7 +2847,7 @@ function panelSink(key){
 // 怪物/恐龙面朝+Z→'-x'（不反号会正值低头）；异形面朝-X→'-z'
 const TILT_AXIS = { marine:'z', smarmor:'z', smpower:'z', smarmor2:'z',
                     msold:'z', mturret:'z',   // 我方兵种（2026-07-26；如仰角方向感觉反了改 '-z'）
-                    edragon:'z', emonster:'-x', ealien:'-z', edino:'-x',
+                    edragon:'z', emonster:'-x', ealien:'-z', ealienlo:'-z', edino:'-x',
                     emship:'-z',     // 母舰：舰首=触须端朝 -X，长轴沿 X（0° 贴地实拍标定）
                     ealien2:'z',     // 异形巨兽：头（红镰刃）朝 +X（0° 贴地实拍标定）
                     ealien3:'z',     // 异形凶兽：头（红镰刃）朝 +X，长尾朝 -X（0° 贴地实拍标定）
@@ -3155,6 +3157,95 @@ setInterval(() => {   // 恢复：面板原型/地形就绪后按存档种子确
   let cfg = null;
   try{ cfg = JSON.parse(localStorage.getItem(PAVE_LS())); }catch(e){}
   if(cfg) buildPave(cfg);
+}, 2000);
+
+// ── 虫潮蛇阵实例化（2026-07-26）：路径小虫全走 InstancedMesh（936 个独立物体的逐帧 CPU 开销不可行），
+// 每个子网格一个 InstancedMesh、子网格局部矩阵预乘进实例矩阵。存档只存 {seed,cols}（wh40k_snake_hive），
+// 恢复按种子确定性重建；股首巨兽由按钮另放为可编辑单体（进 placedItems/存档）
+const SNAKE_LS = () => 'wh40k_snake_' + currentId;
+const snakeState = {cfg: null, meshes: []};
+function clearSnake(){
+  for(const m of snakeState.meshes){ if(m.parent) m.parent.remove(m); if(m.dispose) m.dispose(); }
+  snakeState.meshes.length = 0; snakeState.cfg = null;
+}
+function snakeUnits(cfg){
+  // 与 buildSnake 共用的确定性布点：返回 {lo:[x,z,ry,scale...], heavies:[{key,x,z,ry,scale}]}
+  const rnd = mulberry32(cfg.seed);
+  const FACE_LO = -Math.PI/2;
+  const heading = (x, z, tx, tz) => Math.atan2(-(tx - x), -(tz - z));
+  const lo = [], heavies = [];
+  for(let ci = 0; ci < cfg.cols; ci++){
+    const sx = -650 + ci * 230 + (rnd() - 0.5) * 120;
+    const sz = cfg.front + 320 + rnd() * 420;
+    const tx = cfg.gate + (ci - (cfg.cols - 1) / 2) * 55 + (rnd() - 0.5) * 30;
+    const tz = cfg.front + 15;
+    const dx = tx - sx, dz = tz - sz, len = Math.hypot(dx, dz);
+    const px = -dz / len, pz = dx / len;
+    const amp = 45 + rnd() * 55, waves = 1.6 + rnd() * 1.6, phase = rnd() * Math.PI * 2;
+    const n = 62 + Math.floor(rnd() * 15);
+    let prevX = sx, prevZ = sz + 8;
+    for(let s = 0; s < n; s++){
+      const t = s / (n - 1);
+      const w = Math.sin(phase + t * waves * Math.PI) * amp * (1 - t * 0.75);
+      const x = sx + dx * t + px * w + (rnd() - 0.5) * 3;
+      const z = sz + dz * t + pz * w + (rnd() - 0.5) * 3;
+      const ry0 = heading(prevX, prevZ, x, z);
+      const hx = -Math.sin(ry0), hz = -Math.cos(ry0);
+      const lx = -hz, lz = hx;
+      if(s === 0) heavies.push({key: 'ealien3', x, z, ry: Math.PI/2 + ry0, scale: 1.5});
+      else if(s === 1) heavies.push({key: 'emonster', x, z, ry: Math.PI + ry0, scale: 1.3});
+      else {
+        const lanes = 2 + (s % 3 === 0 ? 1 : 0);
+        for(let L = 0; L < lanes; L++){
+          const off = (L - (lanes - 1) / 2) * (4.5 + rnd() * 2);
+          if(s % 16 === 0 && L === 0){ heavies.push({key: 'ealien', x, z, ry: FACE_LO + ry0, scale: 1.25}); continue; }
+          lo.push(x + lx * off + (rnd() - 0.5) * 2, z + lz * off + (rnd() - 0.5) * 2,
+                  FACE_LO + ry0 + (rnd() - 0.5) * 0.15, 0.8 + rnd() * 0.45);
+        }
+      }
+      prevX = x; prevZ = z;
+    }
+  }
+  return {lo, heavies};
+}
+function buildSnake(cfg){
+  if(!current || currentId !== 'hive' || !current.terrain || !editorProtos['ealienlo']) return false;
+  clearSnake();
+  const units = [];
+  for(const w of cfg.waves) units.push(...snakeUnits(w).lo);
+  const count = units.length / 4;
+  // 原型子网格收集（局部矩阵预乘）
+  const proto = editorProtos['ealienlo'];
+  proto.updateWorldMatrix(true, true);
+  const subs = [];
+  proto.traverse(o => { if(o.isMesh) subs.push({geo: o.geometry, mat: o.material, local: o.matrixWorld.clone()}); });
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sv = new THREE.Vector3(),
+        mUnit = new THREE.Matrix4(), mFinal = new THREE.Matrix4();
+  for(const sub of subs){
+    const im = new THREE.InstancedMesh(sub.geo, sub.mat, count);
+    im.castShadow = false; im.receiveShadow = true;
+    for(let j = 0; j < count; j++){
+      const x = units[j*4], z = units[j*4+1], ry = units[j*4+2], sc = units[j*4+3];
+      p.set(x, current.terrain(x, z), z);
+      e.set(0, ry, 0); q.setFromEuler(e);
+      sv.set(sc, sc, sc);
+      mUnit.compose(p, q, sv);
+      mFinal.multiplyMatrices(mUnit, sub.local);
+      im.setMatrixAt(j, mFinal);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    current.group.add(im);
+    snakeState.meshes.push(im);
+  }
+  snakeState.cfg = cfg;
+  shadowDirty = true;
+  return true;
+}
+setInterval(() => {   // 恢复：按存档种子重建虫潮
+  if(currentId !== 'hive' || snakeState.cfg) return;
+  let cfg = null;
+  try{ cfg = JSON.parse(localStorage.getItem(SNAKE_LS())); }catch(e){}
+  if(cfg) buildSnake(cfg);
 }, 2000);
 
 const _hDir = new THREE.Vector3();   // 体高横向障碍射线方向（collidePlayer 贴面路径）
@@ -4008,6 +4099,11 @@ function doUndo(){
     if(a.pave && a.pave.prev){ buildPave(a.pave.prev); try{ localStorage.setItem(PAVE_LS(), JSON.stringify(a.pave.prev)); }catch(e){} }
     else { try{ localStorage.removeItem(PAVE_LS()); }catch(e){} }
   }
+  if(a.snake !== undefined){
+    clearSnake();
+    if(a.snake && a.snake.prev){ buildSnake(a.snake.prev); try{ localStorage.setItem(SNAKE_LS(), JSON.stringify(a.snake.prev)); }catch(e){} }
+    else { try{ localStorage.removeItem(SNAKE_LS()); }catch(e){} }
+  }
   collidersScene = null; shadowDirty = true;
   editorSave(); editorSyncUI();
   toast('已撤销：' + a.label);
@@ -4240,7 +4336,7 @@ canvas.addEventListener('pointerup', e => {
       if(o2.isMesh && o2.geometry && o2.geometry.boundsTree) hasBVH = true;
       if(o2.isSkinnedMesh) skinned = true;
     });
-    if(hasBVH && !skinned) continue;                      // 已由 ① 精确拾取覆盖（蒙皮件虽有 boundsTree 但不进贴面集，走下方解析盒）
+    if(hasBVH && !skinned && it.alt == null) continue;    // 已由 ① 精确拾取覆盖；悬浮件(alt)不进贴面集①打不中——放行走粗盒（2026-07-26 修母舰不可选）
     if(skinned){
       // 蒙皮克隆 setFromObject 是幻影盒（骨骼矩阵派生不可信）——与碰撞集同款解析盒
       const s = it.scale || 1, cy = it.root.position.y;
@@ -4511,6 +4607,30 @@ document.getElementById('eaSiegeWaves').addEventListener('click', () => {
   if(added.length) pushUndo({label: '分股攻势（' + n + ' 件）', adds: added});
   editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
   toast('分股攻势就位：' + n + ' 件——废墟集结 · 中路强攻 + 两翼包抄 · 巨龙掩护 · 母舰压阵 · 战尘沿线');
+});
+document.getElementById('eaSnakeSwarm').addEventListener('click', () => {
+  // 一键"虫潮蛇阵"（2026-07-26 用户截图定版）：多股虫族多路并行纵队沿蜿蜒路径鱼贯攻门——
+  // 后虫沿前虫行进路线（虫族特性）。路径小虫=GPU 实例化（每波 ~900 只不吃 CPU），
+  // 股首巨兽=可编辑单体。前沿动态实测城墙南沿；可叠波次加密、可撤销
+  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
+  if(!editorProto('ealienlo') || !editorProto('ealien3') || !editorProto('emonster')){ toast('虫潮模型还在加载，稍后再点'); return; }
+  const wb = new THREE.Box3().setFromObject(hiveWallGroup);
+  const wave = {seed: (Math.random() * 1e9) | 0, cols: 6, gate: -20,
+                front: isFinite(wb.max.z) ? wb.max.z + 20 : 140};
+  const prevCfg = snakeState.cfg;
+  const cfg = {waves: [...(prevCfg ? prevCfg.waves : []), wave]};
+  // 新波的巨兽领队入场（可选中/可调；路径小虫在 buildSnake 里实例化）
+  const added = [];
+  for(const h of snakeUnits(wave).heavies){
+    const it2 = editorPlace(h.key, +h.x.toFixed(1), +h.z.toFixed(1), h.ry, h.scale, true);
+    if(it2) added.push(it2);
+  }
+  const ok = buildSnake(cfg);
+  if(ok){ try{ localStorage.setItem(SNAKE_LS(), JSON.stringify(cfg)); }catch(e){} }
+  pushUndo({label: '虫潮蛇阵（第 ' + cfg.waves.length + ' 波）', adds: added, snake: {prev: prevCfg, next: cfg}});
+  editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
+  const totalLo = snakeState.meshes.length ? snakeState.meshes[0].count : 0;
+  toast('虫潮蛇阵：第 ' + cfg.waves.length + ' 波就位，' + totalLo + ' 只虫潮 + ' + added.length + ' 只巨兽领队（再点叠波加密、↩ 撤销）');
 });
 document.getElementById('eaMove').addEventListener('click', () => {
   if(!editSelected){ toast('先点击选中一个已放置的物体'); return; }
