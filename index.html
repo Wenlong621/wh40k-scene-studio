@@ -3149,8 +3149,23 @@ function buildPave(cfg){
   return true;
 }
 function paveTopAt(x, z, fromY){
-  // 2026-07-24 贴皮化：地毯不再是碰撞面（角色站真实地面），保留函数签名供 probeSurf 调用
-  return -Infinity;
+  // 2026-07-26 贴皮支撑面（用户要求站皮不穿皮）：不加几何碰撞，按贴片铺设公式解析出皮面高——
+  // 复刻 buildPave 的 9 点局部最高地形 +0.06，角色支撑面=皮面本身；无侧向阻挡（皮无厚度）
+  const c = paveState.cfg;
+  if(!c || currentId !== 'hive' || !current || !current.terrain) return -Infinity;
+  const T = c.tile || 5;
+  if(x < c.x0 - T || x > c.x1 + T || z < c.z0 - T || z > c.z1 + T) return -Infinity;
+  const m = colliders.find(k => k.kind === 'mega');
+  if(m && x > m.box.min.x - 2 && x < m.box.max.x + 2 && z > m.box.min.z - 2 && z < m.box.max.z + 2) return -Infinity;
+  // 所在贴片的中心（5m 点阵），同款 9 点最高采样
+  const xc = c.x0 + Math.round((x - c.x0) / T) * T;
+  const zc = c.z0 + Math.round((z - c.z0) / T) * T;
+  let h = -Infinity;
+  for(const [ox, oz] of [[0,0],[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4],[-2.4,0],[2.4,0]])
+    h = Math.max(h, current.terrain(xc + ox, zc + oz));
+  const t = h + 0.06;
+  if(fromY != null && t > fromY) return -Infinity;   // 只响应自上而下的探测
+  return t;
 }
 setInterval(() => {   // 恢复：面板原型/地形就绪后按存档种子确定性重建
   if(currentId !== 'hive' || paveState.cfg) return;
@@ -3806,10 +3821,11 @@ function updateMove(dt){
     if(keys['KeyQ']) eyeHeight = Math.min(19000, eyeHeight + vRate*dt);
     if(keys['KeyE']) eyeHeight = Math.max(0.2,   eyeHeight - vRate*dt);
   }
-  // 镜头贴合支撑面起伏（eyeHeight 是相对支撑面的高度；支撑面 = 地形与脚下建筑顶取高者）
+  // 镜头贴合支撑面起伏（eyeHeight 是相对支撑面的高度；支撑面 = 地形/建筑顶/铁板皮面 取高者）
   const groundY = (current && current.terrain)
     ? current.terrain(yawObj.position.x, yawObj.position.z) : 0;
-  const supportY = Math.max(groundY, roofY);
+  const skinY = paveTopAt(yawObj.position.x, yawObj.position.z);   // 2026-07-26 站皮不穿皮：贴皮解析面计入支撑
+  const supportY = Math.max(groundY, roofY, skinY);
   // 跨上/跨下建筑顶（支撑面突变）时重定标 eyeHeight，保持相机世界高度连续不跳变
   if(playerSupport !== null && Math.abs(supportY - playerSupport) > 2)
     eyeHeight = Math.max(0.2, eyeHeight - (supportY - playerSupport));
