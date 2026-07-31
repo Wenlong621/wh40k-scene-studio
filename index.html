@@ -264,6 +264,8 @@
         <button data-ea="gcath6">⛪ 哥特尖殿</button>
         <button data-ea="gcath7">⛪ 哥特巨殿</button>
         <button data-ea="gcath8">⛪ 哥特高殿</button>
+        <button data-ea="gcath9">⛪ 哥特塔殿</button>
+        <button data-ea="arena">🏟 圆形竞技场</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">角色</div>
@@ -2798,6 +2800,8 @@ loadEditorProp('gcath5',   'assets/gothic_cathedral5.glb',       100, true,  '�
 loadEditorProp('gcath6',   'assets/gothic_cathedral6.glb',       100, false, '哥特尖殿'); // 2026-07-26 入库：高瘦立面按高 100m，精细档 368k 面
 loadEditorProp('gcath7',   'assets/gothic_cathedral7.glb',       120, false, '哥特巨殿'); // 2026-07-26 入库：近立方大型综合体按高 120m，精细档 387k 面
 loadEditorProp('gcath8',   'assets/gothic_cathedral8.glb',       110, false, '哥特高殿'); // 2026-07-26 入库：按高 110m，精细档 369k 面
+loadEditorProp('gcath9',   'assets/gothic_cathedral9.glb',       105, false, '哥特塔殿'); // 2026-07-26 入库：高瘦塔殿按高 105m，精细档 368k 面
+loadEditorProp('arena',    'assets/circular_arena.glb',          130, true,  '圆形竞技场'); // 2026-07-26 入库：扁平圆盘必须 byWidth（130m 直径，高≈48m），精细档 395k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2822,7 +2826,7 @@ const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower',
-  'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6', 'gcath7', 'gcath8']);
+  'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6', 'gcath7', 'gcath8', 'gcath9', 'arena']);
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
