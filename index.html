@@ -288,6 +288,7 @@
         <button id="eaSwarmGate">🐜 虫群压城</button>
         <button id="eaSiegeWaves">⚔ 分股攻势</button>
         <button id="eaSnakeSwarm">🐛 虫潮蛇阵</button>
+        <button id="eaDragonFlock">🐦 骸骨龙群</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">我方兵种（星界军）</div>
       <div class="aspect-btns hscroll" style="margin-top:4px;">
@@ -2524,7 +2525,7 @@ const hiveMegaGroup = new THREE.Group();   // 持久引用，buildHive 时挂入
 let megaInfo = {loaded:false, h:0, w:0, d:0};
 function loadMegastructure(){
   const st = () => document.getElementById('marineStatus');
-  gltfLoader.load('assets/cathedral.glb?v=2',
+  gltfLoader.load('assets/cathedral.glb?v=3',   // v3=2026-07-26 Blender 棱角锐化版（25°硬边+贴图反锐化）
     (gltf) => {
       const m = gltf.scene;
       shrinkTextures(m);
@@ -2822,6 +2823,7 @@ loadEditorProp('edragon',  'assets/enemy_dragon.glb',  10,  false, '骸骨巨龙
 loadEditorProp('emonster', 'assets/enemy_monster.glb', 5,   false, '骸骨怪物');
 loadEditorProp('ealien',   'assets/enemy_alien.glb',   4,   false, '异形生物');
 loadEditorProp('ealienlo', 'assets/enemy_alien_lo.glb', 4,  false, '虫潮低模');   // 2026-07-26 蛇形虫潮专用（13k 面，无按钮，仅蛇阵按钮批量铺）
+loadEditorProp('edragonlo','assets/enemy_dragon_lo.glb', 14, false, '龙群低模');  // 2026-07-26 骸骨龙群专用（31k 面，无按钮，仅龙群按钮实例化）
 loadEditorProp('edino',    'assets/enemy_dino.glb',    7,   false, '恐龙猛兽');
 const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 'ealien2', 'ealien3', 'ealienlo']);   // 高度滑杆可用的敌对角色
 // 建筑键集：放置时不吸附堆叠（直接落地面，可互相穿模同平面组合），高度滑杆可悬浮（2026-07-14 用户设定）
@@ -3271,6 +3273,89 @@ setInterval(() => {   // 恢复：按存档种子重建虫潮
   let cfg = null;
   try{ cfg = JSON.parse(localStorage.getItem(SNAKE_LS())); }catch(e){}
   if(cfg) buildSnake(cfg);
+}, 2000);
+
+// ── 骸骨龙群（2026-07-26 用户要求：城外天空的静态鸟群效果）──
+// V 字编队 + 松散群团，龙群低模 GPU 实例化（子网格局部矩阵预乘），存档只存种子可叠群
+const FLOCK_LS = () => 'wh40k_flock_' + currentId;
+const flockState = {cfg: null, meshes: []};
+function clearFlock(){
+  for(const m of flockState.meshes){ if(m.parent) m.parent.remove(m); if(m.dispose) m.dispose(); }
+  flockState.meshes.length = 0; flockState.cfg = null;
+}
+function flockUnits(wave){
+  // 返回 [x,y,z,ry,pitch,roll,scale ...] 七元组
+  const rnd = mulberry32(wave.seed);
+  const out = [];
+  const push = (x, y, z, th, sc) => out.push(x, y, z,
+    Math.PI/2 + th + (rnd() - 0.5) * 0.2,           // edragon FACE=π/2 + 航向
+    (rnd() - 0.5) * 0.2, (rnd() - 0.5) * 0.3, sc);  // 俯仰/滚转微差=鸟群生气
+  for(let f = 0; f < 4; f++){
+    // V 字编队：头鸟朝城，后随两翼展开
+    const lx = -700 + rnd() * 1400, ly = 260 + rnd() * 260, lz = wave.front + 500 + rnd() * 900;
+    const th = Math.atan2(-((wave.gate + (rnd() - 0.5) * 400) - lx), -((wave.front - 100) - lz));
+    const fx = -Math.sin(th), fz = -Math.cos(th);
+    const px2 = -fz, pz2 = fx;
+    push(lx, ly, lz, th, 1.15);
+    const n = 8 + Math.floor(rnd() * 9);
+    for(let i = 1; i <= n; i++){
+      const row = Math.ceil(i / 2), side = (i % 2 === 0) ? 1 : -1;
+      push(lx - fx * row * 20 + px2 * side * row * 15 + (rnd() - 0.5) * 6,
+           ly - row * 2 + (rnd() - 0.5) * 8,
+           lz - fz * row * 20 + pz2 * side * row * 15 + (rnd() - 0.5) * 6,
+           th, 0.7 + rnd() * 0.4);
+    }
+  }
+  for(let c = 0; c < 2; c++){
+    // 松散群团（椭球散布）
+    const cx = -600 + rnd() * 1200, cy = 300 + rnd() * 220, cz = wave.front + 600 + rnd() * 800;
+    const th = rnd() * Math.PI * 2;
+    const n = 15 + Math.floor(rnd() * 11);
+    for(let i = 0; i < n; i++){
+      push(cx + (rnd() - 0.5) * 130, cy + (rnd() - 0.5) * 60, cz + (rnd() - 0.5) * 130,
+           th + (rnd() - 0.5) * 0.6, 0.65 + rnd() * 0.5);
+    }
+  }
+  return out;
+}
+function buildFlock(cfg){
+  if(!current || currentId !== 'hive' || !editorProtos['edragonlo']) return false;
+  clearFlock();
+  const units = [];
+  for(const w of cfg.waves) units.push(...flockUnits(w));
+  const count = units.length / 7;
+  const proto = editorProtos['edragonlo'];
+  proto.updateWorldMatrix(true, true);
+  const subs = [];
+  proto.traverse(o => { if(o.isMesh) subs.push({geo: o.geometry, mat: o.material, local: o.matrixWorld.clone()}); });
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sv = new THREE.Vector3(),
+        mUnit = new THREE.Matrix4(), mFinal = new THREE.Matrix4();
+  for(const sub of subs){
+    const im = new THREE.InstancedMesh(sub.geo, sub.mat, count);
+    im.castShadow = false; im.receiveShadow = false;
+    for(let j = 0; j < count; j++){
+      p.set(units[j*7], units[j*7+1], units[j*7+2]);
+      e.set(units[j*7+4], units[j*7+3], units[j*7+5]);
+      q.setFromEuler(e);
+      const sc = units[j*7+6];
+      sv.set(sc, sc, sc);
+      mUnit.compose(p, q, sv);
+      mFinal.multiplyMatrices(mUnit, sub.local);
+      im.setMatrixAt(j, mFinal);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    current.group.add(im);
+    flockState.meshes.push(im);
+  }
+  flockState.cfg = cfg;
+  shadowDirty = true;
+  return true;
+}
+setInterval(() => {   // 恢复：按存档种子重建龙群
+  if(currentId !== 'hive' || flockState.cfg) return;
+  let cfg = null;
+  try{ cfg = JSON.parse(localStorage.getItem(FLOCK_LS())); }catch(e){}
+  if(cfg) buildFlock(cfg);
 }, 2000);
 
 const _hDir = new THREE.Vector3();   // 体高横向障碍射线方向（collidePlayer 贴面路径）
@@ -4130,6 +4215,11 @@ function doUndo(){
     if(a.snake && a.snake.prev){ buildSnake(a.snake.prev); try{ localStorage.setItem(SNAKE_LS(), JSON.stringify(a.snake.prev)); }catch(e){} }
     else { try{ localStorage.removeItem(SNAKE_LS()); }catch(e){} }
   }
+  if(a.flock !== undefined){
+    clearFlock();
+    if(a.flock && a.flock.prev){ buildFlock(a.flock.prev); try{ localStorage.setItem(FLOCK_LS(), JSON.stringify(a.flock.prev)); }catch(e){} }
+    else { try{ localStorage.removeItem(FLOCK_LS()); }catch(e){} }
+  }
   collidersScene = null; shadowDirty = true;
   editorSave(); editorSyncUI();
   toast('已撤销：' + a.label);
@@ -4657,6 +4747,23 @@ document.getElementById('eaSnakeSwarm').addEventListener('click', () => {
   editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
   const totalLo = snakeState.meshes.length ? snakeState.meshes[0].count : 0;
   toast('虫潮蛇阵：第 ' + cfg.waves.length + ' 波就位，' + totalLo + ' 只虫潮 + ' + added.length + ' 只巨兽领队（再点叠波加密、↩ 撤销）');
+});
+document.getElementById('eaDragonFlock').addEventListener('click', () => {
+  // 一键"骸骨龙群"（2026-07-26）：城外天空静态鸟群——4 个 V 字编队朝城飞行 + 2 个松散群团，
+  // 龙群低模实例化（~90 只/群），可叠群、可撤销
+  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
+  if(!editorProto('edragonlo')){ toast('龙群模型还在加载，稍后再点'); return; }
+  const wb = new THREE.Box3().setFromObject(hiveWallGroup);
+  const wave = {seed: (Math.random() * 1e9) | 0, gate: -20,
+                front: isFinite(wb.max.z) ? wb.max.z + 20 : 140};
+  const prevCfg = flockState.cfg;
+  const cfg = {waves: [...(prevCfg ? prevCfg.waves : []), wave]};
+  const ok = buildFlock(cfg);
+  if(ok){ try{ localStorage.setItem(FLOCK_LS(), JSON.stringify(cfg)); }catch(e){} }
+  pushUndo({label: '骸骨龙群（第 ' + cfg.waves.length + ' 群）', flock: {prev: prevCfg, next: cfg}});
+  editorSave(); editorSyncUI(); shadowDirty = true;
+  const n = flockState.meshes.length ? flockState.meshes[0].count : 0;
+  toast('骸骨龙群：' + n + ' 只巨龙盘旋城外天空（再点叠群、↩ 撤销）');
 });
 document.getElementById('eaMove').addEventListener('click', () => {
   if(!editSelected){ toast('先点击选中一个已放置的物体'); return; }
