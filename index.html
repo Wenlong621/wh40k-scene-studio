@@ -3284,37 +3284,44 @@ function clearFlock(){
   flockState.meshes.length = 0; flockState.cfg = null;
 }
 function flockUnits(wave){
+  // 2026-07-26 v2 乱流虫云（用户参考 SM2 群落图，弃 V 字雁阵）：
+  // 每波 2 条"羽流"——沿弯曲脊线滚动的椭球团簇链（核密边疏）+ 全域游离散兵。
   // 返回 [x,y,z,ry,pitch,roll,scale ...] 七元组
   const rnd = mulberry32(wave.seed);
   const out = [];
+  const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;   // 近高斯（核密边疏）
   const push = (x, y, z, th, sc) => out.push(x, y, z,
-    Math.PI/2 + th + (rnd() - 0.5) * 0.2,           // edragon FACE=π/2 + 航向
-    (rnd() - 0.5) * 0.2, (rnd() - 0.5) * 0.3, sc);  // 俯仰/滚转微差=鸟群生气
-  for(let f = 0; f < 4; f++){
-    // V 字编队：头鸟朝城，后随两翼展开
-    const lx = -700 + rnd() * 1400, ly = 260 + rnd() * 260, lz = wave.front + 500 + rnd() * 900;
-    const th = Math.atan2(-((wave.gate + (rnd() - 0.5) * 400) - lx), -((wave.front - 100) - lz));
-    const fx = -Math.sin(th), fz = -Math.cos(th);
-    const px2 = -fz, pz2 = fx;
-    push(lx, ly, lz, th, 1.15);
-    const n = 8 + Math.floor(rnd() * 9);
-    for(let i = 1; i <= n; i++){
-      const row = Math.ceil(i / 2), side = (i % 2 === 0) ? 1 : -1;
-      push(lx - fx * row * 20 + px2 * side * row * 15 + (rnd() - 0.5) * 6,
-           ly - row * 2 + (rnd() - 0.5) * 8,
-           lz - fz * row * 20 + pz2 * side * row * 15 + (rnd() - 0.5) * 6,
-           th, 0.7 + rnd() * 0.4);
+    Math.PI/2 + th + (rnd() - 0.5) * 1.0,            // 大乱向抖动（虫云无队形）
+    (rnd() - 0.5) * 0.5, (rnd() - 0.5) * 0.6, sc);
+  for(let f = 0; f < 2; f++){
+    // 羽流脊线：三点二次贝塞尔，横跨天空并向上/侧向卷曲
+    const ax = -900 + rnd() * 1800, ay = 220 + rnd() * 180, az = wave.front + 400 + rnd() * 700;
+    const cx2 = ax + (rnd() - 0.5) * 900, cy2 = ay + 120 + rnd() * 220, cz2 = az + (rnd() - 0.5) * 700;
+    const bx = ax + (rnd() - 0.5) * 1400, by = ay + 60 + rnd() * 260, bz = az + (rnd() - 0.5) * 1100;
+    const STEPS = 26;
+    for(let s = 0; s <= STEPS; s++){
+      const t = s / STEPS;
+      const u = 1 - t;
+      const x0 = u*u*ax + 2*u*t*cx2 + t*t*bx;
+      const y0 = u*u*ay + 2*u*t*cy2 + t*t*by;
+      const z0 = u*u*az + 2*u*t*cz2 + t*t*bz;
+      // 脊线切向＝该段总体流向
+      const tx = 2*u*(cx2-ax) + 2*t*(bx-cx2), tz = 2*u*(cz2-az) + 2*t*(bz-cz2);
+      const th = Math.atan2(-tx, -tz);
+      // 团簇半径沿脊线鼓胀收缩（翻涌感），中段最厚
+      const R = (55 + 70 * Math.sin(t * Math.PI)) * (0.7 + rnd() * 0.6);
+      const k = 7 + Math.floor(rnd() * 8);           // 每段 7-14 只
+      for(let i = 0; i < k; i++){
+        push(x0 + gauss() * R, y0 + gauss() * R * 0.45, z0 + gauss() * R,
+             th, 0.5 + rnd() * 0.6);
+      }
     }
   }
-  for(let c = 0; c < 2; c++){
-    // 松散群团（椭球散布）
-    const cx = -600 + rnd() * 1200, cy = 300 + rnd() * 220, cz = wave.front + 600 + rnd() * 800;
-    const th = rnd() * Math.PI * 2;
-    const n = 15 + Math.floor(rnd() * 11);
-    for(let i = 0; i < n; i++){
-      push(cx + (rnd() - 0.5) * 130, cy + (rnd() - 0.5) * 60, cz + (rnd() - 0.5) * 130,
-           th + (rnd() - 0.5) * 0.6, 0.65 + rnd() * 0.5);
-    }
+  // 游离散兵：撒满整片天区（图二里群团之间到处都是零散个体）
+  const nl = 70 + Math.floor(rnd() * 40);
+  for(let i = 0; i < nl; i++){
+    push(-1000 + rnd() * 2000, 200 + rnd() * 380, wave.front + 350 + rnd() * 1500,
+         rnd() * Math.PI * 2, 0.45 + rnd() * 0.6);
   }
   return out;
 }
