@@ -285,6 +285,7 @@
         <button data-ea="emship">🛸 虫族母舰</button>
         <button data-ea="ealien2">🦂 异形巨兽</button>
         <button data-ea="ealien3">🕷 异形凶兽</button>
+        <button data-ea="egun">🔫 异形枪兵</button>
         <button id="eaSwarmGate">🐜 虫群压城</button>
         <button id="eaSiegeWaves">⚔ 分股攻势</button>
         <button id="eaSnakeSwarm">🐛 虫潮蛇阵</button>
@@ -2823,9 +2824,10 @@ loadEditorProp('edragon',  'assets/enemy_dragon.glb',  10,  false, '骸骨巨龙
 loadEditorProp('emonster', 'assets/enemy_monster.glb', 5,   false, '骸骨怪物');
 loadEditorProp('ealien',   'assets/enemy_alien.glb',   4,   false, '异形生物');
 loadEditorProp('ealienlo', 'assets/enemy_alien_lo.glb', 4,  false, '虫潮低模');   // 2026-07-26 蛇形虫潮专用（13k 面，无按钮，仅蛇阵按钮批量铺）
-loadEditorProp('edragonlo','assets/enemy_dragon_lo.glb', 14, false, '龙群低模');  // 2026-07-26 骸骨龙群专用（31k 面，无按钮，仅龙群按钮实例化）
+loadEditorProp('edragonlo','assets/enemy_dragon_lo.glb', 14, false, '龙群低模');  // 2026-07-26 骸骨龙群专用（7.5k 面，无按钮，仅龙群按钮实例化）
+loadEditorProp('egun',     'assets/enemy_gunner.glb',   3.5, false, '异形枪兵');  // 2026-07-26 入库：纵长四足枪兽按高 3.5m（身长≈8.4m），191k 面
 loadEditorProp('edino',    'assets/enemy_dino.glb',    7,   false, '恐龙猛兽');
-const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 'ealien2', 'ealien3', 'ealienlo']);   // 高度滑杆可用的敌对角色
+const ENEMY_KEYS = new Set(['edragon', 'emonster', 'ealien', 'edino', 'emship', 'ealien2', 'ealien3', 'ealienlo', 'egun']);   // 高度滑杆可用的敌对角色
 // 建筑键集：放置时不吸附堆叠（直接落地面，可互相穿模同平面组合），高度滑杆可悬浮（2026-07-14 用户设定）
 const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 'gbld', 'gruin',
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
@@ -2859,7 +2861,7 @@ function panelSink(key){
 // 怪物/恐龙面朝+Z→'-x'（不反号会正值低头）；异形面朝-X→'-z'
 const TILT_AXIS = { marine:'z', smarmor:'z', smpower:'z', smarmor2:'z',
                     msold:'z', mturret:'z',   // 我方兵种（2026-07-26；如仰角方向感觉反了改 '-z'）
-                    edragon:'z', emonster:'-x', ealien:'-z', ealienlo:'-z', edino:'-x',
+                    edragon:'z', emonster:'-x', ealien:'-z', ealienlo:'-z', edino:'-x', egun:'-x',
                     emship:'-z',     // 母舰：舰首=触须端朝 -X，长轴沿 X（0° 贴地实拍标定）
                     ealien2:'z',     // 异形巨兽：头（红镰刃）朝 +X（0° 贴地实拍标定）
                     ealien3:'z',     // 异形凶兽：头（红镰刃）朝 +X，长尾朝 -X（0° 贴地实拍标定）
