@@ -3252,7 +3252,7 @@ function buildSnake(cfg){
         mUnit = new THREE.Matrix4(), mFinal = new THREE.Matrix4();
   for(const sub of subs){
     const im = new THREE.InstancedMesh(sub.geo, sub.mat, count);
-    im.castShadow = false; im.receiveShadow = true;
+    im.castShadow = true; im.receiveShadow = true;   // 2026-08-06 用户要求：虫潮地面单位投影（实例化阴影=每网格一批，开销可控）
     for(let j = 0; j < count; j++){
       const x = units[j*4], z = units[j*4+1], ry = units[j*4+2], sc = units[j*4+3];
       p.set(x, current.terrain(x, z), z);
