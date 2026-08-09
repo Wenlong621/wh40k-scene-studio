@@ -3341,7 +3341,7 @@ function buildFlock(cfg){
         mUnit = new THREE.Matrix4(), mFinal = new THREE.Matrix4();
   for(const sub of subs){
     const im = new THREE.InstancedMesh(sub.geo, sub.mat, count);
-    im.castShadow = false; im.receiveShadow = false;
+    im.castShadow = true; im.receiveShadow = false;   // 2026-08-06 用户要求：龙群同样投影（高空影子沿日光方向偏移属正常）
     for(let j = 0; j < count; j++){
       p.set(units[j*7], units[j*7+1], units[j*7+2]);
       e.set(units[j*7+4], units[j*7+3], units[j*7+5]);
@@ -3977,7 +3977,10 @@ function updateMove(dt){
   // 阴影取景框动态跟随（穷人版 CSM）：贴地时正交盒收紧到 ±160m（texel 0.04m，角色拖影锐利），
   // 升空看全景时按视角高度放大回全图 ±2900（巨构/城墙长影保留）——观察高度决定该看清什么
   if(currentId === 'hive' && hiveSun){
-    const half = Math.min(2900, Math.max(160, 160 + eyeHeight*4));
+    // 2026-08-06 修高台盲区：eyeHeight 是相对支撑面的高度——站在 400m 平台上看全景时它只有几十米，
+    // 阴影盒收得太小导致远处大军没影子（用户抓包）。用绝对相机高度兜底
+    const camH = Math.max(eyeHeight, yawObj.position.y);
+    const half = Math.min(2900, Math.max(160, 160 + camH*4));
     if(Math.abs(half - hiveSunHalf) > hiveSunHalf*0.02){
       hiveSunHalf = half;
       const c = hiveSun.shadow.camera;
@@ -3986,6 +3989,7 @@ function updateMove(dt){
       // 偏置随 texel 尺寸等比。系数 2.2→1.2：13° 低阳下影根横移=normalBias·cot(仰角)，
       // 0.127m 在下坡沙丘上离脚 1m+（用户抓包）；痤疮由负向 depth bias(-0.0002) 托底
       hiveSun.shadow.normalBias = Math.max(0.04, 1.2*half/2900);
+      shadowDirty = true;   // 盒子变尺寸立即重绘（原先等 %60 帧兜底会闪一秒旧影）
     }
     const tx = (2*hiveSunHalf)/8192;                               // texel 尺寸
     // 锚点粗粒度步进：取整数倍 texel（影子不蠕动）的自适应网格——取景框 ±160m 时步长 ~19m、
@@ -3993,7 +3997,7 @@ function updateMove(dt){
     const G = tx * Math.max(1, Math.round(Math.max(1.2, hiveSunHalf*0.12)/tx));
     const sx = Math.round(yawObj.position.x/G)*G, sz = Math.round(yawObj.position.z/G)*G;
     if(sx !== hiveSun.target.position.x || sz !== hiveSun.target.position.z){
-      hiveSun.position.set(sx + 1747, 1908, sz + 3700);            // 保持光向不变（只平移取景框；y 与仰角 25° 同步）
+      hiveSun.position.set(sx + 1747, 3434, sz + 3700);            // 保持光向不变（只平移取景框；y=4092·tan40°，2026-08-06 修正旧 25° 残留）
       hiveSun.target.position.set(sx, 0, sz);
       shadowDirty = true;
     }
