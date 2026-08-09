@@ -3341,7 +3341,7 @@ function buildFlock(cfg){
         mUnit = new THREE.Matrix4(), mFinal = new THREE.Matrix4();
   for(const sub of subs){
     const im = new THREE.InstancedMesh(sub.geo, sub.mat, count);
-    im.castShadow = true; im.receiveShadow = false;   // 2026-08-06 用户要求：龙群同样投影（高空影子沿日光方向偏移属正常）
+    im.castShadow = false; im.receiveShadow = false;   // 高空飞行物不投影：真实太阳有 0.5° 视直径，数百米高空的影子半影已糊成不可见的淡雾；平行光的锐影落地反而假，还搅乱地面部队剪影
     for(let j = 0; j < count; j++){
       p.set(units[j*7], units[j*7+1], units[j*7+2]);
       e.set(units[j*7+4], units[j*7+3], units[j*7+5]);
