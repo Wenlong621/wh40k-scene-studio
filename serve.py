@@ -33,6 +33,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'ok')
             return
+        if self.path.startswith('/export'):
+            # Blender 布景导出：body 为场景 JSON（地形/实体矩阵/群体实例/日光相机），存 export/<name>.json
+            length = int(self.headers.get('Content-Length', 0))
+            data = self.rfile.read(length)
+            name = 'scene'
+            if 'name=' in self.path:
+                raw_name = self.path.split('name=')[-1].split('&')[0]
+                name = ''.join(c for c in raw_name if c.isalnum() or c in '-_') or 'scene'
+            out_dir = os.path.join(ROOT, 'export')
+            os.makedirs(out_dir, exist_ok=True)
+            with open(os.path.join(out_dir, name + '.json'), 'wb') as f:
+                f.write(data)
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'ok')
+            return
         if self.path.startswith('/save'):
             length = int(self.headers.get('Content-Length', 0))
             data = self.rfile.read(length)

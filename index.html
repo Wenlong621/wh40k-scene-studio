@@ -213,6 +213,7 @@
     <button id="shoot">📷 截图出帧（2K）</button>
     <button id="recBtn" style="margin-top:6px;">🎬 录像模式（空格开始/停止）</button>
     <button id="copyPrompt">📋 复制本场景 Scene-Lock 提示词（英文）</button>
+    <button id="blenderExport" style="margin-top:6px;">🎥 导出 Blender 布景（Cycles 出片）</button>
   </div>
 
   <div class="sec">
@@ -2529,6 +2530,7 @@ function loadMegastructure(){
   gltfLoader.load('assets/cathedral.glb?v=3',   // v3=2026-07-26 Blender 棱角锐化版（25°硬边+贴图反锐化）
     (gltf) => {
       const m = gltf.scene;
+      m.userData.srcUrl = 'assets/cathedral.glb';   // Blender 导出溯源
       shrinkTextures(m);
       let box = new THREE.Box3().setFromObject(m);
       let size = box.getSize(new THREE.Vector3());
@@ -2633,6 +2635,7 @@ function loadFortressWall(){
   gltfLoader.load('assets/fortress_gate.glb',
     (gltf) => {
       const seg = gltf.scene;
+      seg.userData.srcUrl = 'assets/fortress_gate.glb';   // Blender 导出溯源（proto.clone() 深拷贝 userData 带给每段）
       shrinkTextures(seg);
       seg.traverse(o => {
         if(o.isMesh){
@@ -2695,6 +2698,7 @@ function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
   gltfLoader.load(url,
     (gltf) => {
       const m = gltf.scene;
+      m.userData.srcUrl = url.split('?')[0];   // Blender 导出溯源：克隆体经 userData 深拷贝继承
       shrinkTextures(m);
       m.traverse(o => {
         if(o.isMesh){
@@ -5084,6 +5088,7 @@ window.__dbg = {keys, rig:yawObj, player, step:(dt)=>updateMove(dt), gl:renderer
   colliders:()=>colliders.map(c=>({kind:c.kind, x:[+c.box.min.x.toFixed(1),+c.box.max.x.toFixed(1)], z:[+c.box.min.z.toFixed(1),+c.box.max.z.toFixed(1)], top:+c.box.max.y.toFixed(1), precise:c.precise})),
   rebuild:()=>{ try{ collidersScene = null; ensureColliders(); return 'ok:' + colliders.length; }catch(e){ return 'ERR:' + e.message; } },
   eye:()=>eyeHeight, sup:(v)=>{ if(v!==undefined) playerSupport=v; return playerSupport; },
+  exportBlender:()=>exportBlenderScene(),   // QC：无 UI 驱动 Blender 布景导出
   probe:(x,z)=>probeSurf(x,z,300),
   items:()=>placedItems.filter(it=>it.scene===currentId).map(it=>({k:it.key, x:+it.x.toFixed(1), z:+it.z.toFixed(1), y:+it.root.position.y.toFixed(2), alt:it.alt!=null?+it.alt.toFixed(1):null, s:it.scale})),
   selectItem:(i)=>{ editSelected = placedItems.filter(it=>it.scene===currentId)[i] || null; editorSyncUI(); return editSelected ? editSelected.key : null; },   // QC：按序号选中
@@ -5280,6 +5285,90 @@ document.getElementById('copyPrompt').addEventListener('click', () => {
     () => toast('复制失败，请手动复制控制台输出')
   );
   console.log(current.prompt);
+});
+
+// ── Blender 布景导出（Cycles 出片通道）：地形高度场 + 全部 GLB 实体世界矩阵 + 虫潮/龙群实例 + 日光/相机 ──
+// 配套 tools/blender_import.py 在 Blender 里重建同一布景做路径追踪出片；
+// 导出的矩阵仍是 three Y-up 世界系（列主序），换轴统一在 Python 侧做，两边约定见 blender_import.py 头注
+function exportBlenderScene(){
+  if(currentId !== 'hive'){ toast('Blender 导出目前只做了蜂巢城场景'); return null; }
+  const out = {v:1, scene:currentId, items:[], pops:[],
+    skipped:['铁板贴皮(29万贴片)', '火堆/烟柱/尘埃粒子', '天幕贴图(Blender 侧用天空替代)', '主角模型']};
+  // ① 地形高度场（561×561 规则网格，行内 x 快变）；排布假设不成立宁可中止不可歪
+  if(hiveGroundGeo){
+    const p = hiveGroundGeo.attributes.position;
+    const n = Math.round(Math.sqrt(p.count));
+    const x0 = p.getX(0), z0 = p.getZ(0), dx = p.getX(1)-x0, dz = p.getZ(n)-z0;
+    if(n*n !== p.count || Math.abs(p.getX(n)-x0) > 1e-3 || Math.abs(p.getZ(1)-z0) > 1e-3
+       || dx <= 0 || dz <= 0){   // 步长符号也是 Blender 侧面片绕向的前提，变负会让地面法线静默翻转
+      toast('地形网格排布异常，导出中止'); return null;
+    }
+    const hs = new Array(p.count);
+    for(let i=0;i<p.count;i++) hs[i] = +p.getY(i).toFixed(2);
+    out.terrain = {n, x0:+x0.toFixed(2), z0:+z0.toFixed(2), dx:+dx.toFixed(4), dz:+dz.toFixed(4),
+                   heights:hs, color:'4d4a43', roughness:1};
+  }
+  // ② 场景中全部 GLB 实体（srcUrl 标签溯源 + three 世界矩阵）；跳过造景幽灵、主角、隐藏物。
+  //    注意 editGhost 有两种身份：纯预览幽灵（无 item，应跳过）和移动中的真实实体（有 item，
+  //    root 就是实体本体——跳过会把整座巨构/整排城墙静默丢出导出，按当前位置照常导出）
+  const skip = new Set();
+  if(editGhost && editGhost.root && !editGhost.item) editGhost.root.traverse(o=>skip.add(o));
+  if(typeof charHolder !== 'undefined' && charHolder) charHolder.traverse(o=>skip.add(o));   // TPS 主角克隆带 srcUrl，会被当雕像导出
+  scene.updateMatrixWorld(true);
+  scene.traverse(o=>{
+    if(skip.has(o) || !o.userData || !o.userData.srcUrl) return;
+    let vis = true, w = o;
+    while(w){ if(w.visible === false){ vis = false; break; } w = w.parent; }
+    if(!vis) return;
+    out.items.push({src:o.userData.srcUrl, m:o.matrixWorld.toArray().map(v=>+v.toFixed(5))});
+  });
+  // ③ 虫潮/龙群实例：按种子重生成，单位矩阵组合与 buildSnake/buildFlock 完全同路（欧拉序也一致），
+  //    再右乘原型归一化矩阵（gltf.scene 在 proto 组内的扶正/缩放/置底），得到整只 GLB 的世界矩阵
+  const popOut = (cfg, key, gen) => {
+    const proto = editorProtos[key];
+    if(!cfg || !proto || !proto.children[0] || !proto.children[0].userData.srcUrl) return;
+    proto.updateWorldMatrix(true, true);
+    const norm = proto.children[0].matrixWorld;
+    const q = new THREE.Quaternion(), e = new THREE.Euler(), pv = new THREE.Vector3(), sv = new THREE.Vector3(),
+          mU = new THREE.Matrix4(), mF = new THREE.Matrix4();
+    const ms = [];
+    for(const u of gen(cfg)){
+      pv.set(u.p[0], u.p[1], u.p[2]); e.set(u.e[0], u.e[1], u.e[2]); q.setFromEuler(e);
+      sv.set(u.s, u.s, u.s); mU.compose(pv, q, sv); mF.multiplyMatrices(mU, norm);
+      ms.push(mF.toArray().map(v=>+v.toFixed(4)));
+    }
+    if(ms.length) out.pops.push({src:proto.children[0].userData.srcUrl, count:ms.length, ms});
+  };
+  popOut(snakeState.cfg, 'ealienlo', (cfg)=>{
+    const us = []; for(const w of cfg.waves) us.push(...snakeUnits(w).lo);
+    const r = [];
+    for(let j=0;j<us.length;j+=4) r.push({p:[us[j], current.terrain(us[j], us[j+1]), us[j+1]], e:[0, us[j+2], 0], s:us[j+3]});
+    return r;
+  });
+  popOut(flockState.cfg, 'edragonlo', (cfg)=>{
+    const us = []; for(const w of cfg.waves) us.push(...flockUnits(w));
+    const r = [];
+    for(let j=0;j<us.length;j+=7) r.push({p:[us[j], us[j+1], us[j+2]], e:[us[j+4], us[j+3], us[j+5]], s:us[j+6]});
+    return r;
+  });
+  // ④ 日光/环境/相机（three Y-up 原始参数）
+  if(hiveSun) out.sun = {pos:hiveSun.position.toArray(), tgt:hiveSun.target.position.toArray(),
+                         color:'fff0dc', intensity:hiveSun.intensity};
+  out.env = {hemiSky:'9fb0b5', hemiGround:'24272a', hemiIntensity:2.2, bg:'1c120c'};
+  camera.updateMatrixWorld(true);
+  out.camera = {m:camera.matrixWorld.toArray().map(v=>+v.toFixed(6)), fov:camera.fov, aspect:camera.aspect};
+  return out;
+}
+document.getElementById('blenderExport').addEventListener('click', () => {
+  const out = exportBlenderScene();
+  if(!out) return;
+  fetch('/export?name=scene', {method:'POST', body:JSON.stringify(out)})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+    .then(()=>{
+      toast(`已导出 ${out.items.length} 件实体 + ${out.pops.reduce((a,p)=>a+p.count,0)} 只群体单位 → export/scene.json`);
+      console.log('Blender 重建：\nblender --background --python-exit-code 1 --python tools/blender_import.py -- export/scene.json --render export/render.png');
+    })
+    .catch(e=>toast('导出失败（' + e.message + '）：本地服务器未运行或版本过旧？'));
 });
 
 const BM_KEY = 'wh40k_cam_bookmarks';
