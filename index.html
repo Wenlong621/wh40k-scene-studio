@@ -5360,6 +5360,10 @@ function exportBlenderScene(){
   return out;
 }
 document.getElementById('blenderExport').addEventListener('click', () => {
+  // 导出要把 scene.json 写进本机项目目录（Blender 从那里读），云端静态托管无后端可写（POST 会 405）
+  if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
+    toast('云端版写不了盘：请在本地版 http://127.0.0.1:8943 里点这个按钮'); return;
+  }
   const out = exportBlenderScene();
   if(!out) return;
   fetch('/export?name=scene', {method:'POST', body:JSON.stringify(out)})
