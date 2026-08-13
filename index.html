@@ -214,6 +214,8 @@
     <button id="recBtn" style="margin-top:6px;">🎬 录像模式（空格开始/停止）</button>
     <button id="copyPrompt">📋 复制本场景 Scene-Lock 提示词（英文）</button>
     <button id="blenderExport" style="margin-top:6px;">🎥 导出 Blender 布景（Cycles 出片）</button>
+    <button id="layoutDownload" style="margin-top:6px;">💾 下载布局备份（云端版防丢）</button>
+    <button id="layoutRestore" style="margin-top:6px;">📂 导入布局备份</button>
   </div>
 
   <div class="sec">
@@ -5033,13 +5035,44 @@ function collectLS(){
   }
   return JSON.stringify(o);
 }
+const IS_LOCAL_HOST = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function syncLS(){
   const s = collectLS();
   if(s === _bakLast || s === '{}') return;
   fetch('/layout?name=backup', {method:'POST', body:s}).then(r => { if(r.ok) _bakLast = s; }).catch(()=>{});
 }
-setInterval(syncLS, 10000);   // 10s 差异检查，仅变化时才发（几十 KB 本地 POST，异步不占帧）
-window.addEventListener('pagehide', () => { try{ navigator.sendBeacon('/layout?name=backup', collectLS()); }catch(e){} });
+if(IS_LOCAL_HOST){   // 云端静态托管无 /layout 端点，盲发只会每 10s 刷一条 405
+  setInterval(syncLS, 10000);   // 10s 差异检查，仅变化时才发（几十 KB 本地 POST，异步不占帧）
+  window.addEventListener('pagehide', () => { try{ navigator.sendBeacon('/layout?name=backup', collectLS()); }catch(e){} });
+}
+// ── 云端版布局备份/恢复：内容只存在浏览器缓存里，清一次浏览数据就全没——给用户一条手动逃生通道 ──
+document.getElementById('layoutDownload').addEventListener('click', () => {
+  const s = collectLS();
+  if(s === '{}'){ toast('当前浏览器还没有任何存档'); return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([s], {type:'application/json'}));
+  a.download = 'wh40k_layout_backup_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  toast('布局备份已下载——存好这个文件，清浏览器缓存后可用「导入备份」找回全部内容');
+});
+document.getElementById('layoutRestore').addEventListener('click', () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if(!f) return;
+    f.text().then(t => {
+      const bak = JSON.parse(t);
+      let n = 0;
+      for(const k in bak) if(k.indexOf('wh40k_') === 0){ localStorage.setItem(k, bak[k]); n++; }
+      if(!n){ toast('文件里没有 wh40k_ 存档键，没有导入任何内容'); return; }
+      toast('已导入 ' + n + ' 项存档，刷新页面生效');
+      setTimeout(() => location.reload(), 1200);
+    }).catch(e => toast('导入失败：' + e.message));
+  };
+  inp.click();
+});
 fetch('layouts/backup.json').then(r => r.ok ? r.json() : null).then(bak => {
   if(!bak) return;
   let n = 0;
