@@ -5360,16 +5360,25 @@ function exportBlenderScene(){
   return out;
 }
 document.getElementById('blenderExport').addEventListener('click', () => {
-  // 导出要把 scene.json 写进本机项目目录（Blender 从那里读），云端静态托管无后端可写（POST 会 405）
-  if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
-    toast('云端版写不了盘：请在本地版 http://127.0.0.1:8943 里点这个按钮'); return;
-  }
   const out = exportBlenderScene();
   if(!out) return;
+  const nPop = out.pops.reduce((a,p)=>a+p.count,0);
+  if(!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)){
+    // 云端静态托管无后端可写盘（POST 会 405）：改走浏览器下载，把 scene.json 下到本机再喂 Blender
+    const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'scene.json';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 4000);   // 立刻 revoke 会掐断进行中的下载
+    toast(`已导出 ${out.items.length} 件实体 + ${nPop} 只群体单位 → 已下载 scene.json，喂给 tools/blender_import.py 即可`);
+    console.log('Blender 重建（云端版：把路径换成你刚下载的 scene.json）：\nblender --background --python-exit-code 1 --python tools/blender_import.py -- "%USERPROFILE%\\Downloads\\scene.json" --render export/render.png');
+    return;
+  }
   fetch('/export?name=scene', {method:'POST', body:JSON.stringify(out)})
     .then(r=>{ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
     .then(()=>{
-      toast(`已导出 ${out.items.length} 件实体 + ${out.pops.reduce((a,p)=>a+p.count,0)} 只群体单位 → export/scene.json`);
+      toast(`已导出 ${out.items.length} 件实体 + ${nPop} 只群体单位 → export/scene.json`);
       console.log('Blender 重建：\nblender --background --python-exit-code 1 --python tools/blender_import.py -- export/scene.json --render export/render.png');
     })
     .catch(e=>toast('导出失败（' + e.message + '）：本地服务器未运行或版本过旧？'));
