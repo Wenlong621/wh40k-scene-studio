@@ -127,6 +127,25 @@ def get_asset(src):
                 c.objects.unlink(o)
         raise
     new = [o for o in bpy.data.objects if o not in before]
+    # 按实时端渲染名单剪掉 GLB 内嵌杂物（如 Tripo 模型自带的 Icosphere 背景球——
+    # 摄影棚的角色克隆管线只取骨架+蒙皮体，原始 GLB 里的球会在 Cycles 里凭空出现挡镜头）。
+    # 仅当名单与导入对象命名体系对得上（至少一个名字匹配）才敢剪，防止两边命名不一致时误删正身
+    wl = (data.get('meshes') or {}).get(src)
+    if wl:
+        wl_set = set(n.split('.')[0] for n in wl if n)
+        meshes_new = [o for o in new if o.type == 'MESH']
+        # 对象名或网格数据名任一命中都算匹配（Tripo 的 node/mesh 前缀两边可能不一致）
+        def names_of(o):
+            ns = {o.name.split('.')[0]}
+            if o.data:
+                ns.add(o.data.name.split('.')[0])
+            return ns
+        matched = [o for o in meshes_new if names_of(o) & wl_set]
+        if matched:   # 命名体系对得上才敢剪，防止不一致时误删正身
+            for o in [o for o in meshes_new if not (names_of(o) & wl_set)]:
+                print('PRUNE %s: %s（实时端不渲染的内嵌网格）' % (src, o.name))
+                new.remove(o)
+                bpy.data.objects.remove(o, do_unlink=True)
     # 源集合刻意不挂进场景树：未链接集合不参与渲染但可被实例引用（实例 empty 即用户，不会被清理）。
     # 不能用 hide_render 藏原件——集合的隐藏标志会连同它的全部实例一起藏掉
     col = bpy.data.collections.new('A_' + os.path.basename(src))

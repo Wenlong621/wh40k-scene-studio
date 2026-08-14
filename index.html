@@ -5348,12 +5348,18 @@ function exportBlenderScene(){
   if(editGhost && editGhost.root && !editGhost.item) editGhost.root.traverse(o=>skip.add(o));
   if(typeof charHolder !== 'undefined' && charHolder) charHolder.traverse(o=>skip.add(o));   // TPS 主角克隆带 srcUrl，会被当雕像导出
   scene.updateMatrixWorld(true);
+  out.meshes = {};   // 每种资产在实时端实际渲染的网格名单——Blender 按它剪掉原始 GLB 里的内嵌杂物（如 Tripo 背景球）
   scene.traverse(o=>{
     if(skip.has(o) || !o.userData || !o.userData.srcUrl) return;
     let vis = true, w = o;
     while(w){ if(w.visible === false){ vis = false; break; } w = w.parent; }
     if(!vis) return;
     out.items.push({src:o.userData.srcUrl, m:o.matrixWorld.toArray().map(v=>+v.toFixed(5))});
+    if(!out.meshes[o.userData.srcUrl]){
+      const names = [];
+      o.traverse(x=>{ if(x.isMesh && x.visible) names.push(x.name || ''); });
+      out.meshes[o.userData.srcUrl] = names;
+    }
   });
   // ③ 虫潮/龙群实例：按种子重生成，单位矩阵组合与 buildSnake/buildFlock 完全同路（欧拉序也一致），
   //    再右乘原型归一化矩阵（gltf.scene 在 proto 组内的扶正/缩放/置底），得到整只 GLB 的世界矩阵
@@ -5362,6 +5368,11 @@ function exportBlenderScene(){
     if(!cfg || !proto || !proto.children[0] || !proto.children[0].userData.srcUrl) return;
     proto.updateWorldMatrix(true, true);
     const norm = proto.children[0].matrixWorld;
+    if(!out.meshes[proto.children[0].userData.srcUrl]){
+      const names = [];
+      proto.children[0].traverse(x=>{ if(x.isMesh && x.visible) names.push(x.name || ''); });
+      out.meshes[proto.children[0].userData.srcUrl] = names;
+    }
     const q = new THREE.Quaternion(), e = new THREE.Euler(), pv = new THREE.Vector3(), sv = new THREE.Vector3(),
           mU = new THREE.Matrix4(), mF = new THREE.Matrix4();
     const ms = [];
