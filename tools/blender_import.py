@@ -7,6 +7,9 @@
   GUI 查看:  blender --python tools/blender_import.py -- export/scene.json
 可选参数:  --samples 128   Cycles 采样数（默认 128，试渲可用 32）
           --res 2560      渲染横向分辨率（纵向按导出时画幅比自动算）
+          --sky stars     天幕：stars=星际星野+暗星云（默认）/ grey=纯色天光
+          --fog 0.0008    体积雾密度（默认 0.0008，off 关闭）
+          --rain 12000    雨丝数量（默认 12000，off 关闭；只铺在相机视锥内）
 
 坐标约定（与 index.html exportBlenderScene 配套）：
   导出的矩阵是 three.js Y-up 右手世界系、列主序。换轴 C = Rx(+90°)，(x,y,z)_t → (x,-z,y)_b。
@@ -38,6 +41,9 @@ RENDER = arg('--render')
 BLEND = arg('--blend')
 SAMPLES = int(arg('--samples', '128'))
 RES_X = int(arg('--res', '2560'))
+SKY = arg('--sky', 'stars')
+FOG = arg('--fog', '0.0008')
+RAIN = arg('--rain', '12000')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if not os.path.isabs(JSON_PATH):
@@ -193,6 +199,9 @@ if sun_d:
     li.energy = 4.0                      # Cycles 太阳辐照度基线（W/m²），亮度不匹配就调这里
     li.angle = math.radians(0.53)        # 真实太阳视直径 → 距离越远半影越宽（实时端做不到的正确软影）
     li.color = hexc(sun_d.get('color', 'ffffff'))[:3]
+    if SKY == 'stars':                   # 星际夜幕下改冷调苍白主光（雨夜钢灰质感），暖阳会穿帮
+        li.energy = 3.6
+        li.color = (0.80, 0.85, 0.95)
     sun = bpy.data.objects.new('Sun', li)
     dir_t = (Vector(sun_d['tgt']) - Vector(sun_d['pos'])).normalized()
     dir_b = (C.to_3x3() @ dir_t).normalized()
@@ -204,9 +213,99 @@ env = data.get('env', {})
 w = bpy.data.worlds.new('World')
 scn.world = w
 w.use_nodes = True
-bg = next(nd for nd in w.node_tree.nodes if nd.type == 'BACKGROUND')
-bg.inputs['Color'].default_value = hexc(env.get('hemiSky', '9fb0b5'))
-bg.inputs['Strength'].default_value = 0.4    # 冷调天光托底（对应实时端 hemi），过亮会洗掉日照反差
+nt = w.node_tree
+bg = next(nd for nd in nt.nodes if nd.type == 'BACKGROUND')
+if SKY == 'stars':
+    # ── 星际天幕：程序化星野 + 暗星云 + 地平线雾霭（纯节点，无外部贴图）──
+    # 颜色运算全部用 VectorMath/Math 组合（避开 ShaderNodeMix 多类型插槽的按名取坑）
+    tex = nt.nodes.new('ShaderNodeTexCoord')
+    sep = nt.nodes.new('ShaderNodeSeparateXYZ')
+    nt.links.new(tex.outputs['Generated'], sep.inputs['Vector'])
+    # 星点：高频 Voronoi 距离场取尖峰；每颗星亮度=细胞随机色 BW^8（少数亮星、多数暗星）
+    vor = nt.nodes.new('ShaderNodeTexVoronoi')
+    vor.inputs['Scale'].default_value = 30.0    # 星距≈1/S rad≈2°；首版 320 星径仅 0.002° 亚像素不可见
+    nt.links.new(tex.outputs['Generated'], vor.inputs['Vector'])
+    less = nt.nodes.new('ShaderNodeMath'); less.operation = 'LESS_THAN'
+    less.inputs[1].default_value = 0.045        # 星径≈t/S≈0.086°≈1-2px@2560
+    nt.links.new(vor.outputs['Distance'], less.inputs[0])
+    bwn = nt.nodes.new('ShaderNodeRGBToBW')
+    nt.links.new(vor.outputs['Color'], bwn.inputs['Color'])
+    powr = nt.nodes.new('ShaderNodeMath'); powr.operation = 'POWER'
+    powr.inputs[1].default_value = 8.0
+    nt.links.new(bwn.outputs['Val'], powr.inputs[0])
+    star = nt.nodes.new('ShaderNodeMath'); star.operation = 'MULTIPLY'
+    nt.links.new(less.outputs['Value'], star.inputs[0])
+    nt.links.new(powr.outputs['Value'], star.inputs[1])
+    starv = nt.nodes.new('ShaderNodeVectorMath'); starv.operation = 'SCALE'
+    starv.inputs[0].default_value = (11.0, 12.2, 14.0)   # 星点冷白偏蓝，标量增益乘进去（雾会吃掉一档亮度）
+    nt.links.new(star.outputs['Value'], starv.inputs['Scale'])
+    # 暗星云底色
+    noi = nt.nodes.new('ShaderNodeTexNoise')
+    noi.inputs['Scale'].default_value = 2.2
+    noi.inputs['Detail'].default_value = 6.0
+    nt.links.new(tex.outputs['Generated'], noi.inputs['Vector'])
+    ramp = nt.nodes.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].position = 0.35
+    ramp.color_ramp.elements[0].color = (0.004, 0.006, 0.012, 1)
+    ramp.color_ramp.elements[1].position = 0.78
+    ramp.color_ramp.elements[1].color = (0.030, 0.046, 0.078, 1)
+    nt.links.new(noi.outputs['Fac'], ramp.inputs['Fac'])
+    skyc = nt.nodes.new('ShaderNodeVectorMath'); skyc.operation = 'ADD'
+    nt.links.new(ramp.outputs['Color'], skyc.inputs[0])
+    nt.links.new(starv.outputs['Vector'], skyc.inputs[1])
+    # 地平线雾霭：|Z| 越小越混入冷灰霭（呼应场景体积雾），星野只在高仰角清晰
+    absz = nt.nodes.new('ShaderNodeMath'); absz.operation = 'ABSOLUTE'
+    nt.links.new(sep.outputs['Z'], absz.inputs[0])
+    hfac = nt.nodes.new('ShaderNodeMapRange')
+    hfac.inputs['From Min'].default_value = 0.02
+    hfac.inputs['From Max'].default_value = 0.14   # 霭带压窄：平视机位的天空带也要见到星
+    hfac.inputs['To Min'].default_value = 1.0
+    hfac.inputs['To Max'].default_value = 0.0
+    nt.links.new(absz.outputs['Value'], hfac.inputs['Value'])
+    inv = nt.nodes.new('ShaderNodeMath'); inv.operation = 'SUBTRACT'
+    inv.inputs[0].default_value = 1.0
+    nt.links.new(hfac.outputs['Result'], inv.inputs[1])
+    sky_s = nt.nodes.new('ShaderNodeVectorMath'); sky_s.operation = 'SCALE'
+    nt.links.new(skyc.outputs['Vector'], sky_s.inputs[0])
+    nt.links.new(inv.outputs['Value'], sky_s.inputs['Scale'])
+    haze = nt.nodes.new('ShaderNodeVectorMath'); haze.operation = 'SCALE'
+    haze.inputs[0].default_value = (0.055, 0.068, 0.085)   # 地平线冷灰霭
+    nt.links.new(hfac.outputs['Result'], haze.inputs['Scale'])
+    fin = nt.nodes.new('ShaderNodeVectorMath'); fin.operation = 'ADD'
+    nt.links.new(sky_s.outputs['Vector'], fin.inputs[0])
+    nt.links.new(haze.outputs['Vector'], fin.inputs[1])
+    nt.links.new(fin.outputs['Vector'], bg.inputs['Color'])
+    bg.inputs['Strength'].default_value = 1.0
+else:
+    bg.inputs['Color'].default_value = hexc(env.get('hemiSky', '9fb0b5'))
+    bg.inputs['Strength'].default_value = 0.4   # 冷调天光托底（对应实时端 hemi），过亮会洗掉日照反差
+
+# ── 体积雾：限高雾箱（不用世界体积——那会把星空也糊掉）──
+if FOG != 'off':
+    import bmesh
+    fdens = float(FOG)
+    fme = bpy.data.meshes.new('fogbox')
+    fbm = bmesh.new()
+    bmesh.ops.create_cube(fbm, size=1.0)
+    fbm.to_mesh(fme)
+    fbm.free()
+    fog_ob = bpy.data.objects.new('fog', fme)
+    fog_ob.scale = (16000, 16000, 450)
+    fog_ob.location = (0, 0, 225)
+    fmat = bpy.data.materials.new('fog')
+    fmat.use_nodes = True
+    fnt = fmat.node_tree
+    for nd in [n for n in fnt.nodes if n.type == 'BSDF_PRINCIPLED']:
+        fnt.nodes.remove(nd)
+    vol = fnt.nodes.new('ShaderNodeVolumePrincipled')
+    vol.inputs['Density'].default_value = fdens
+    vol.inputs['Anisotropy'].default_value = 0.35
+    vol.inputs['Color'].default_value = (0.65, 0.72, 0.80, 1)
+    fout = next(nd for nd in fnt.nodes if nd.type == 'OUTPUT_MATERIAL')
+    fnt.links.new(vol.outputs['Volume'], fout.inputs['Volume'])
+    fme.materials.append(fmat)
+    scn.collection.objects.link(fog_ob)
+    print('FOG_OK density=%s' % fdens)
 
 # ── ④ 相机 ──
 cam_d = data['camera']
@@ -220,10 +319,63 @@ cam.matrix_world = C @ three_mat(cam_d['m'])
 scn.collection.objects.link(cam)
 scn.camera = cam
 
+# ── 大雨：相机视锥内撒雨丝面片（细长四边形=雨滴运动模糊后的拉丝；统一风向微抖动）──
+if RAIN != 'off':
+    import random
+    rnd = random.Random(40000)   # 定种子：同一布景重渲雨形不变
+    n_rain = int(RAIN)
+    cam_q = cam.matrix_world.to_quaternion()
+    r_fwd = cam_q @ Vector((0, 0, -1))
+    r_rgt = cam_q @ Vector((1, 0, 0))
+    r_up = cam_q @ Vector((0, 1, 0))
+    r_org = cam.matrix_world.translation
+    wind = Vector((0.22, 0.10, -1.0)).normalized()
+    verts, faces = [], []
+    for i in range(n_rain):
+        dd = 4.0 + rnd.random() * 130.0                   # 均匀分布：近处不能挤成白栅栏（首版教训）
+        spread = dd * 0.75 + 2.0
+        p = (r_org + r_fwd * dd
+             + r_rgt * ((rnd.random() * 2 - 1) * spread)
+             + r_up * ((rnd.random() * 2 - 1) * spread * 0.6))
+        L = 0.30 + rnd.random() * 0.50
+        wj = Vector((wind.x + (rnd.random() - 0.5) * 0.06,
+                     wind.y + (rnd.random() - 0.5) * 0.06, wind.z)).normalized()
+        wd = 0.0035 + rnd.random() * 0.0045               # 半宽 3.5-8mm：真实雨丝是 1-3px 的淡痕
+        side = wj.cross((p - r_org).normalized())
+        if side.length < 1e-6:
+            side = r_rgt.copy()
+        side = side.normalized() * wd
+        base = len(verts)
+        verts += [tuple(p - side), tuple(p + side), tuple(p + side + wj * L), tuple(p - side + wj * L)]
+        faces.append((base, base + 1, base + 2, base + 3))
+    rme = bpy.data.meshes.new('rain')
+    rme.from_pydata(verts, [], faces)
+    rme.validate()
+    rmat = bpy.data.materials.new('rain')
+    rmat.use_nodes = True
+    rnt = rmat.node_tree
+    for nd in [x for x in rnt.nodes if x.type == 'BSDF_PRINCIPLED']:
+        rnt.nodes.remove(nd)
+    rtrans = rnt.nodes.new('ShaderNodeBsdfTransparent')
+    remit = rnt.nodes.new('ShaderNodeEmission')
+    remit.inputs['Color'].default_value = (0.75, 0.82, 0.95, 1)
+    remit.inputs['Strength'].default_value = 1.6
+    rmix = rnt.nodes.new('ShaderNodeMixShader')
+    rmix.inputs['Fac'].default_value = 0.09   # 大部分透明+一点自发光=暗背景上可读的雨丝
+    rout = next(nd for nd in rnt.nodes if nd.type == 'OUTPUT_MATERIAL')
+    rnt.links.new(rtrans.outputs['BSDF'], rmix.inputs[1])
+    rnt.links.new(remit.outputs['Emission'], rmix.inputs[2])
+    rnt.links.new(rmix.outputs['Shader'], rout.inputs['Surface'])
+    rme.materials.append(rmat)
+    rain_ob = bpy.data.objects.new('rain', rme)
+    scn.collection.objects.link(rain_ob)
+    print('RAIN_OK count=%d' % n_rain)
+
 # ── ⑤ Cycles 渲染配置 ──
 scn.render.engine = 'CYCLES'
 scn.cycles.samples = SAMPLES
 scn.cycles.use_denoising = True
+scn.cycles.transparent_max_bounces = 24   # 雨丝多层透明面片叠深，默认 8 会出黑块
 scn.render.resolution_x = RES_X
 scn.render.resolution_y = round(RES_X / cam_d.get('aspect', 16 / 9))
 try:
