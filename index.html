@@ -271,6 +271,9 @@
         <button data-ea="arena">🏟 圆形竞技场</button>
         <button data-ea="shead">🗿 巨石头像</button>
         <button data-ea="ftower">🗼 堡垒塔楼</button>
+        <button data-ea="hfort">🧱 重工堡垒</button>
+        <button data-ea="igate">🚧 工业大门</button>
+        <button data-ea="medic">🏥 医疗设施</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">建筑物细节</div>
@@ -2823,6 +2826,9 @@ loadEditorProp('dtcath',   'assets/gothic_cathedral_detail.glb',  80, false, '�
 loadEditorProp('dtface',   'assets/gothic_facade.glb',            70, false, '大教堂立面'); // 2026-08-13 入库「建筑物细节」：立面拼贴件按高 70m（占地≈49×35m），精细档 361k 面
 loadEditorProp('ftower',   'assets/fortress_tower.glb',           70, false, '堡垒塔楼');   // 2026-08-23 入库：中世纪堡垒塔按高 70m（占地≈40×32m），精细档 381k 面
 loadEditorProp('dtarch',   'assets/gothic_arch.glb',              45, false, '哥特拱门');   // 2026-08-23 入库「建筑物细节」：板状拱门按高 45m（占地≈24×11m），精细档 375k 面
+loadEditorProp('hfort',    'assets/heavy_industrial_fortress.glb', 100, true, '重工堡垒');  // 2026-08-23 入库：宽体重工堡垒按占地宽 100m（高≈53m），精细档 379k 面
+loadEditorProp('igate',    'assets/industrial_gate.glb',           70, true, '工业大门');   // 2026-08-23 入库：横贯门楼按占地宽 70m（高≈24m），精细档 369k 面
+loadEditorProp('medic',    'assets/medical_facility.glb',          90, true, '医疗设施');   // 2026-08-23 入库：方形建筑群按占地宽 90m（高≈62m），精细档 372k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2850,7 +2856,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'refinery', 'scannon', 'gcath2', 'ocath', 'gbridge', 'gstair', 'gdoor', 'garch', 'gbridge2',
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower',
   'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6', 'gcath7', 'gcath8', 'gcath9', 'arena', 'shead',
-  'dtcath', 'dtface', 'ftower', 'dtarch']);   // 「建筑物细节」板块：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'dtcath', 'dtface', 'ftower', 'dtarch', 'hfort', 'igate', 'medic']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
