@@ -317,6 +317,7 @@
         <button data-ea="mpanel">🔲 金属铁板</button>
         <button data-ea="mdoor">🚪 铁门板</button>
         <button id="eaPaveCity">🧩 一键铺城</button>
+        <button id="eaPaveBuildings">🧲 建筑区铺板</button>
         <button id="eaClearPanels">🧹 清空全部铁板</button>
         <button id="eaClearPavs">🧹 清空旧贴皮</button>
       </div>
@@ -3141,11 +3142,21 @@ function buildPave(cfg){
   const megaC = colliders.find(c => c.kind === 'mega');
   const rnd = mulberry32(cfg.seed);
   const T = cfg.tile || 5;
+  // v2 多矩形（2026-08-24 建筑区铺板）：cfg.rects=[[x0,z0,x1,z1]...]；v1 单矩形自动升格。
+  // 贴片对齐全局 5m 点阵（不再相对 x0），矩形重叠/相邻处按点阵键去重不叠板
+  const rects = cfg.rects || [[cfg.x0, cfg.z0, cfg.x1, cfg.z1]];
   const lists = [[], [], [], []];
-  for(let z = cfg.z0; z <= cfg.z1; z += T) for(let x = cfg.x0; x <= cfg.x1; x += T){
-    const ti = (rnd() * 4) | 0, rot = ((rnd() * 4) | 0) * Math.PI / 2;   // 先耗随机数再排除，保证确定性
-    if(megaC && x > megaC.box.min.x - 2 && x < megaC.box.max.x + 2 && z > megaC.box.min.z - 2 && z < megaC.box.max.z + 2) continue;
-    lists[ti].push(x, z, rot);
+  const seen = new Set();
+  for(const r of rects){
+    const rx0 = Math.ceil(r[0] / T) * T, rz0 = Math.ceil(r[1] / T) * T;
+    for(let z = rz0; z <= r[3]; z += T) for(let x = rx0; x <= r[2]; x += T){
+      const ti = (rnd() * 4) | 0, rot = ((rnd() * 4) | 0) * Math.PI / 2;   // 先耗随机数再排除，保证确定性
+      const ck = x + ':' + z;
+      if(seen.has(ck)) continue;
+      seen.add(ck);
+      if(megaC && x > megaC.box.min.x - 2 && x < megaC.box.max.x + 2 && z > megaC.box.min.z - 2 && z < megaC.box.max.z + 2) continue;
+      lists[ti].push(x, z, rot);
+    }
   }
   // 2026-07-24 改贴皮：铁板不再是 3D 实体，而是贴着地形的平面贴图（法线对齐坡面 + polygonOffset 防闪面）。
   // 不参与任何碰撞——角色站在真实地面上，贴皮只是地表纹理
@@ -3192,12 +3203,17 @@ function paveTopAt(x, z, fromY){
   const c = paveState.cfg;
   if(!c || currentId !== 'hive' || !current || !current.terrain) return -Infinity;
   const T = c.tile || 5;
-  if(x < c.x0 - T || x > c.x1 + T || z < c.z0 - T || z > c.z1 + T) return -Infinity;
+  const rects = c.rects || [[c.x0, c.z0, c.x1, c.z1]];   // v2 多矩形兼容
+  let inRect = false;
+  for(const r of rects){
+    if(x >= r[0] - T && x <= r[2] + T && z >= r[1] - T && z <= r[3] + T){ inRect = true; break; }
+  }
+  if(!inRect) return -Infinity;
   const m = colliders.find(k => k.kind === 'mega');
   if(m && x > m.box.min.x - 2 && x < m.box.max.x + 2 && z > m.box.min.z - 2 && z < m.box.max.z + 2) return -Infinity;
-  // 所在贴片的中心（5m 点阵），同款 9 点最高采样
-  const xc = c.x0 + Math.round((x - c.x0) / T) * T;
-  const zc = c.z0 + Math.round((z - c.z0) / T) * T;
+  // 所在贴片的中心（全局 5m 点阵，与 buildPave v2 同一对齐），同款 9 点最高采样
+  const xc = Math.round(x / T) * T;
+  const zc = Math.round(z / T) * T;
   let h = -Infinity;
   for(const [ox, oz] of [[0,0],[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4],[-2.4,0],[2.4,0]])
     h = Math.max(h, current.terrain(xc + ox, zc + oz));
@@ -4975,6 +4991,57 @@ document.getElementById('eaPaveCity').addEventListener('click', () => {
   const nTiles = paveState.meshes.reduce((s, m) => s + m.count, 0);
   toast(okPave ? ('铺城完成：拆旧板 ' + nDel + ' 件，5m 混拼地毯 ' + nTiles + ' 块铺满城墙内 + 桥面/殿宇顶 ' + n + ' 件')
                : '地毯构建未就绪（铁板模型还在加载），请稍后再点一次');
+});
+document.getElementById('eaPaveBuildings').addEventListener('click', () => {
+  // 建筑区铺板（2026-08-24 用户要求：有建筑物的区域地面铺满铁板贴片）：
+  // 所有已摆建筑占地盒外扩 12m → 20m 栅格并集 → 行程合并成矩形组 → 追加进贴皮地毯（多矩形 v2）。
+  // 贴皮跟随地形起伏、不压平不碰撞，建筑高度零影响；与已有地毯（如一键铺城）自动去重衔接
+  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
+  const blds = placedItems.filter(it => it.scene === 'hive' && BUILDING_KEYS.has(it.key) && !PANEL_KEYS.has(it.key));
+  if(!blds.length){ toast('本场景还没有摆放建筑物'); return; }
+  const CELL = 20, MARGIN = 12;
+  const cells = new Set();
+  const bb = new THREE.Box3();
+  for(const it of blds){
+    bb.setFromObject(it.root);
+    if(!isFinite(bb.min.x)) continue;
+    const ix0 = Math.floor((bb.min.x - MARGIN) / CELL), ix1 = Math.floor((bb.max.x + MARGIN) / CELL);
+    const iz0 = Math.floor((bb.min.z - MARGIN) / CELL), iz1 = Math.floor((bb.max.z + MARGIN) / CELL);
+    for(let iz = iz0; iz <= iz1; iz++) for(let ix = ix0; ix <= ix1; ix++) cells.add(ix + ':' + iz);
+  }
+  // 行程合并：每行连续格→run，相邻行同跨 run→矩形（把并集压成少量矩形，存档小、恢复快）
+  const rows = new Map();
+  for(const ck of cells){ const [ix, iz] = ck.split(':').map(Number); if(!rows.has(iz)) rows.set(iz, []); rows.get(iz).push(ix); }
+  const runs = [];
+  for(const iz of [...rows.keys()].sort((a, b) => a - b)){
+    const xs = rows.get(iz).sort((a, b) => a - b);
+    let s = xs[0], p = xs[0];
+    for(let i = 1; i <= xs.length; i++){
+      if(i < xs.length && xs[i] === p + 1){ p = xs[i]; continue; }
+      runs.push({iz, s, p});
+      if(i < xs.length){ s = xs[i]; p = xs[i]; }
+    }
+  }
+  const mergedR = [];
+  for(const r of runs){
+    const m2 = mergedR.find(q => q.s === r.s && q.p === r.p && q.iz1 === r.iz - 1);
+    if(m2) m2.iz1 = r.iz; else mergedR.push({s: r.s, p: r.p, iz0: r.iz, iz1: r.iz});
+  }
+  const newRects = mergedR.map(q => [q.s * CELL, q.iz0 * CELL, (q.p + 1) * CELL, (q.iz1 + 1) * CELL]);
+  // 与现有地毯合并（v1 单矩形自动升格 rects）
+  const prev = paveState.cfg;
+  const oldRects = prev ? (prev.rects || [[prev.x0, prev.z0, prev.x1, prev.z1]]) : [];
+  const cfg = {seed: prev ? prev.seed : (Math.random() * 1e9) | 0, tile: 5, rects: oldRects.concat(newRects)};
+  // 体量护栏：贴片数上界估算（重叠按双份计），超 60 万块拒绝——重建与阴影通道会明显卡
+  let est = 0;
+  for(const r of cfg.rects) est += (Math.ceil((r[2] - r[0]) / 5) + 1) * (Math.ceil((r[3] - r[1]) / 5) + 1);
+  if(est > 600000){ toast('铺板估算超 ' + (est / 10000 | 0) + ' 万块，超过上限：先「清空旧贴皮」或减少建筑范围'); return; }
+  const ok = buildPave(cfg);
+  if(!ok){ toast('地毯构建未就绪（铁板模型还在加载），请稍后再点一次'); return; }
+  try{ localStorage.setItem(PAVE_LS(), JSON.stringify(cfg)); }catch(e){}
+  pushUndo({label: '建筑区铺板', pave: {prev, next: cfg}});
+  const nTiles = paveState.meshes.reduce((s2, m3) => s2 + m3.count, 0);
+  toast('建筑区铺板完成：' + blds.length + ' 栋建筑 → 新增 ' + newRects.length + ' 片区域，地毯共 ' + nTiles + ' 块');
 });
 document.getElementById('eaClearPanels').addEventListener('click', () => {
   // 一键清空当前场景全部 3D 地面铁板（2026-07-19 用户要求）
