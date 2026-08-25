@@ -2863,7 +2863,7 @@ const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.h
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
 function updateScaleMax(key){
   const el = document.getElementById('eaScale');
-  if(el) el.max = (key && BUILDING_KEYS.has(key) && !PANEL_KEYS.has(key)) ? 1000 : 500;
+  if(el) el.max = (key && BUILDING_KEYS.has(key) && !PANEL_KEYS.has(key)) ? 10000 : 500;   // 建筑物上限 100×（2026-08-24 用户要求；滑杆值/100=倍数，点数字可直接输入精确值）
 }
 // 3D 地面铁板键集：缩放语义=拼贴数量（N×N 阵列，单块保持原生尺寸，最小 1 块）
 const PANEL_KEYS = new Set(['vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor']);
