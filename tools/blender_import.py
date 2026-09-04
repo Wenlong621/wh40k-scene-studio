@@ -202,6 +202,10 @@ if sun_d:
     if SKY == 'stars':                   # 星际夜幕下改冷调苍白主光（雨夜钢灰质感），暖阳会穿帮
         li.energy = 3.6
         li.color = (0.80, 0.85, 0.95)
+    if data.get('env', {}).get('lightMode') == 'studio':
+        # 摄影棚打光（实时端同步）：太阳视直径放大到 15°=巨型柔光箱，影子糊成过渡；亮度压低靠天光填
+        li.energy = min(li.energy, 1.8)
+        li.angle = math.radians(15.0)
     sun = bpy.data.objects.new('Sun', li)
     dir_t = (Vector(sun_d['tgt']) - Vector(sun_d['pos'])).normalized()
     dir_b = (C.to_3x3() @ dir_t).normalized()
@@ -279,6 +283,8 @@ if SKY == 'stars':
 else:
     bg.inputs['Color'].default_value = hexc(env.get('hemiSky', '9fb0b5'))
     bg.inputs['Strength'].default_value = 0.4   # 冷调天光托底（对应实时端 hemi），过亮会洗掉日照反差
+if env.get('lightMode') == 'studio':
+    bg.inputs['Strength'].default_value = max(bg.inputs['Strength'].default_value, 0.9)   # 摄影棚：天光当巨型柔光罩
 
 # ── 体积雾：限高雾箱（不用世界体积——那会把星空也糊掉）──
 if FOG != 'off':

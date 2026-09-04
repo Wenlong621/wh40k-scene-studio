@@ -214,6 +214,7 @@
     <button id="recBtn" style="margin-top:6px;">🎬 录像模式（空格开始/停止）</button>
     <button id="copyPrompt">📋 复制本场景 Scene-Lock 提示词（英文）</button>
     <button id="blenderExport" style="margin-top:6px;">🎥 导出 Blender 布景（Cycles 出片）</button>
+    <button id="lightMode" style="margin-top:6px;">🎬 打光：摄影棚（无影）</button>
     <button id="layoutDownload" style="margin-top:6px;">💾 下载布局备份（云端版防丢）</button>
     <button id="layoutRestore" style="margin-top:6px;">📂 导入布局备份</button>
   </div>
@@ -1700,6 +1701,19 @@ function buildHive(){
   sun.shadow.normalBias = 2.2;
   g.add(sun); g.add(sun.target);
   hiveSun = sun;   // 阴影取景框动态跟随（updateMove 里按视角高度缩放正交盒）
+  hiveHemi = hemi;
+  // 摄影棚补光组（默认隐藏，studio 模式点亮）：背向/侧向两盏无影平行光把背光面填平
+  const fillA = new THREE.DirectionalLight(0xdfe6ee, 2.0);
+  fillA.position.set(-1747, 2600, -3905); fillA.target.position.set(0, 0, 0);
+  g.add(fillA); g.add(fillA.target);
+  const fillB = new THREE.DirectionalLight(0xe8e4da, 1.5);
+  fillB.position.set(2600, 2000, 900); fillB.target.position.set(0, 0, 205);
+  g.add(fillB); g.add(fillB.target);
+  fillA.visible = fillB.visible = false;
+  hiveFills = [fillA, fillB];
+  let lightMode = 'studio';
+  try{ lightMode = localStorage.getItem(LIGHT_LS) || 'studio'; }catch(e){}
+  applyHiveLightMode(lightMode);
 
   return {
     group:g, terrain: meshTerrain, fogColor:0x8a6248, fogDensity:0, bg:0x1c120c,   // 旧指数雾停用：蜂巢统一走注入式高度雾（滑杆仍生效）
@@ -2603,6 +2617,25 @@ let wallSegHalf = 16;           // 段半宽，载入后按实际间距更新（
 const wallOfs = {x:0, z:0, ry:0, s:1};            // 整排城墙的位移/旋转(绕排中心)/缩放
 const megaFoot = {x:-20, z:-500, r:470};          // 巨构锚点+压平半径（terrain() 动态读取）
 let hiveSun = null, hiveSunHalf = 2900;           // 蜂巢日光引用 + 阴影框当前半径（动态跟随用）
+let hiveHemi = null, hiveFills = [];              // 摄影棚打光模式引用（2026-08-29 用户要求无影均匀光）
+const LIGHT_LS = 'wh40k_light_hive';
+function applyHiveLightMode(mode){
+  // studio=摄影棚级均匀无影光：关投影、压主光、抬半球漫射、开两盏包裹补光（反差被填平）
+  // sun=原电影日光：单一强主光+硬投影（SM2 质感）
+  if(!hiveSun || !hiveHemi) return;
+  if(mode === 'studio'){
+    hiveSun.intensity = 2.2; hiveSun.castShadow = false;
+    hiveHemi.intensity = 4.6;
+    for(const f of hiveFills) f.visible = true;
+  } else {
+    hiveSun.intensity = 7.2; hiveSun.castShadow = true;
+    hiveHemi.intensity = 2.2;
+    for(const f of hiveFills) f.visible = false;
+  }
+  shadowDirty = true;
+  const btn = document.getElementById('lightMode');
+  if(btn) btn.textContent = (mode === 'studio') ? '🎬 打光：摄影棚（无影）' : '☀ 打光：电影日光（硬影）';
+}
 const pavFlats = [];                              // 石板路压平圈 {x,z,half,cs,sn,circle,h}（terrain() 动态读取）
 function rebuildPavFlats(extra){
   // 重算全部石板路压平圈（按放置顺序采样中心高度→逐个生效）→ 重压地形 → 全部贴皮重烘贴合。
@@ -5507,11 +5540,21 @@ function exportBlenderScene(){
   // ④ 日光/环境/相机（three Y-up 原始参数）
   if(hiveSun) out.sun = {pos:hiveSun.position.toArray(), tgt:hiveSun.target.position.toArray(),
                          color:'fff0dc', intensity:hiveSun.intensity};
-  out.env = {hemiSky:'9fb0b5', hemiGround:'24272a', hemiIntensity:2.2, bg:'1c120c'};
+  let expLightMode = 'studio';
+  try{ expLightMode = localStorage.getItem(LIGHT_LS) || 'studio'; }catch(e){}
+  out.env = {hemiSky:'9fb0b5', hemiGround:'24272a', hemiIntensity:2.2, bg:'1c120c', lightMode: expLightMode};
   camera.updateMatrixWorld(true);
   out.camera = {m:camera.matrixWorld.toArray().map(v=>+v.toFixed(6)), fov:camera.fov, aspect:camera.aspect};
   return out;
 }
+document.getElementById('lightMode').addEventListener('click', () => {
+  let mode = 'studio';
+  try{ mode = localStorage.getItem(LIGHT_LS) || 'studio'; }catch(e){}
+  mode = (mode === 'studio') ? 'sun' : 'studio';
+  try{ localStorage.setItem(LIGHT_LS, mode); }catch(e){}
+  applyHiveLightMode(mode);
+  toast(mode === 'studio' ? '摄影棚打光：无投影、包裹补光、亮度均匀' : '电影日光：单一主光+硬投影（SM2 质感）');
+});
 document.getElementById('blenderExport').addEventListener('click', () => {
   const out = exportBlenderScene();
   if(!out) return;
