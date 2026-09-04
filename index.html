@@ -279,6 +279,10 @@
         <button data-ea="epic3">🏯 史诗巨构3</button>
         <button data-ea="epic4">🏯 史诗巨构4</button>
         <button data-ea="gbridge3">🌉 哥特拱桥</button>
+        <button data-ea="gtower2">🗼 哥特塔楼2</button>
+        <button data-ea="gcath10">⛪ 哥特深殿</button>
+        <button data-ea="gcath11">⛪ 哥特横殿</button>
+        <button data-ea="ncath">⛪ 恢弘圣殿</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">建筑物细节</div>
@@ -2840,6 +2844,10 @@ loadEditorProp('epic2',    'assets/epic_fort_tower.glb',          150, false, '�
 loadEditorProp('epic3',    'assets/epic_gothic_tower.glb',        150, false, '史诗巨构3'); // 2026-08-24 入库：哥特塔楼按高 150m（占地≈93×92m），精细档 382k 面
 loadEditorProp('epic4',    'assets/epic_castle_wall.glb',         180, true, '史诗巨构4');  // 2026-08-24 入库：城堡城墙宽体按占地宽 180m（高≈125m），精细档 378k 面
 loadEditorProp('gbridge3', 'assets/gothic_arch_bridge.glb',       120, true, '哥特拱桥');   // 2026-08-25 入库：长跨拱桥按占地宽 120m（高≈37m，桥面宽≈26m），精细档 381k 面
+loadEditorProp('gtower2',  'assets/gothic_tower2.glb',             95, false, '哥特塔楼2');  // 2026-08-28 入库：细高塔按高 95m（占地≈49×57m），精细档 383k 面
+loadEditorProp('gcath10',  'assets/gothic_cathedral10.glb',        90, false, '哥特深殿');   // 2026-08-28 入库：纵长殿体按高 90m（占地≈59×98m），精细档 359k 面
+loadEditorProp('gcath11',  'assets/gothic_cathedral11.glb',       120, true,  '哥特横殿');   // 2026-08-28 入库：宽体殿按占地宽 120m（高≈71m），精细档 372k 面
+loadEditorProp('ncath',    'assets/grand_cathedral.glb',          110, true,  '恢弘圣殿');   // 2026-08-28 入库：近方巨殿按占地宽 110m（高≈104m），精细档 363k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2868,7 +2876,8 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'vpanel', 'fpanel', 'ipanel', 'mpanel', 'mdoor', 'sstair', 'pdoctor', 'fgate', 'knight', 'gcath3', 'gdoor2', 'gtower', 'gcath4', 'stower',
   'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6', 'gcath7', 'gcath8', 'gcath9', 'arena', 'shead',
   'dtcath', 'dtface', 'ftower', 'dtarch', 'hfort', 'igate', 'medic',
-  'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
+  'gtower2', 'gcath10', 'gcath11', 'ncath']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
