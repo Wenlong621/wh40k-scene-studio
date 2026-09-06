@@ -391,7 +391,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true, logarithmicDepthBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 上限 2→1.5：高分屏主渲染+辉光后期像素量 -44%（截图导出不受影响，shot() 自设分辨率）
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 1.0;   // 2026-09-04 参考图重制：压一档换更深的影调（旧 1.1）
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // 阴影按需重绘：默认 autoUpdate 会每帧把全场景（含所有放置的百万面 GLB）画进 8192² 阴影贴图，
@@ -411,7 +411,9 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const GradeShader = {
-  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.42}, grain:{value:0.045} },
+  // 2026-09-04 参考图重制（银灰碳黑 grimdark 概念图）：低饱和银灰基底 + 冷板岩暗部/暖金高光分离
+  // + 深黑位 + 重暗角。旧 SM2 冷亮版参数备档：S曲线0.22、无去饱和、分离(−.018,.004,.030)×0.7、vig 0.42
+  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.52}, grain:{value:0.045} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     uniform sampler2D tDiffuse; uniform float time, vig, grain;
@@ -420,11 +422,14 @@ const GradeShader = {
     void main(){
       vec3 col = texture2D(tDiffuse, vUv).rgb;
       vec3 t = clamp(col, 0.0, 1.0);
-      col += (t*t*(3.0-2.0*t) - t)*0.22;                           // 胶片S曲线（HDR安全：>1区域增量为0）
+      col += (t*t*(3.0-2.0*t) - t)*0.30;                           // 胶片S曲线加深（HDR安全：>1区域增量为0）
       float l = clamp(dot(col, vec3(0.299,0.587,0.114)), 0.0, 1.0);
-      col += (0.5-l)*vec3(-0.018, 0.004, 0.030)*0.7;               // 暗部偏青、亮部偏暖
+      col = mix(col, vec3(l), 0.28);                               // 银灰基底：全局去饱和（灯火暖色靠高光分离找回）
+      col += (0.5-l)*vec3(-0.024, -0.002, 0.026);                  // 暗部冷板岩（银灰偏蓝，蓝推力压过头会把风暴云染成海军蓝）
+      col += smoothstep(0.55, 1.0, l)*vec3(0.055, 0.036, -0.022); // 高光暖银金（灯火/受光石面回暖）
+      col = max(col - 0.012, 0.0)*1.02;                            // 黑位下沉：碳黑但不糊死
       float d = distance(vUv, vec2(0.5));
-      col *= 1.0 - vig*smoothstep(0.32, 0.86, d);                  // 暗角
+      col *= 1.0 - vig*smoothstep(0.28, 0.86, d);                  // 暗角加重加宽
       col += (rnd(vUv*vec2(1923.0,1083.0)+fract(time)*7.0)*2.0-1.0)*grain*0.5; // 颗粒
       gl_FragColor = vec4(max(col, 0.0), 1.0);
     }`
@@ -433,7 +438,7 @@ const GradeShader = {
 const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, {samples:4, type:THREE.HalfFloatType});
 const composer = new EffectComposer(renderer, rt);
 composer.addPass(new RenderPass(scene, camera));
-const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.55, 0.80);
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.55, 0.78);   // 2026-09-04 灯火辉光微增（旧 0.55/0.80）
 composer.addPass(bloom);
 const gradePass = new ShaderPass(GradeShader);
 composer.addPass(gradePass);
@@ -1507,7 +1512,7 @@ function buildHive(){
   if(GROUND_PLAIN){
     // 纯土色：无贴图、无花纹、无顶点色（起伏地形/阴影/高度雾照常）。
     // 暖色日光+调色会把红抬起来，albedo 压低红分量才出"土黄"而不是红陶土
-    groundM = mat({color:0x4d4a43, roughness:1});   // 中性灰土（2026-07-26 SM2 重制降饱和；旧暖土黄 0x564a3b）
+    groundM = mat({color:0x3d3b36, roughness:1});   // 深碳灰土（2026-09-04 参考图重制压暗一档；SM2 亮版 0x4d4a43、旧暖土黄 0x564a3b）
   } else {
   // ① 顶点色宏观变化：焦黑烧灼带 / 灰烬浅斑 / 锈渍偏色 + 低洼沉暗，打破 3km 单色
   const vcol = new Float32Array(gPos.count*3);
