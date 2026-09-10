@@ -330,8 +330,6 @@
         <button data-ea="ipanel">⬛ 工业铁板</button>
         <button data-ea="mpanel">🔲 金属铁板</button>
         <button data-ea="mdoor">🚪 铁门板</button>
-        <button id="eaPaveCity">🧩 一键铺城</button>
-        <button id="eaPaveBuildings">🧲 建筑区铺板</button>
         <button id="eaClearPanels">🧹 清空全部铁板</button>
         <button id="eaClearPavs">🧹 清空旧贴皮</button>
       </div>
@@ -4993,122 +4991,6 @@ document.querySelectorAll('.hscroll').forEach(el => {
   el.addEventListener('wheel', e => {
     if(Math.abs(e.deltaY) > Math.abs(e.deltaX)){ el.scrollLeft += e.deltaY; e.preventDefault(); }
   }, {passive:false});
-});
-document.getElementById('eaPaveCity').addEventListener('click', () => {
-  // 一键铺城 v2（2026-07-20 用户设定）：① 城内地面＝20m 单板逐格随机混拼（随机花纹+随机朝向），
-  // 全部统一嵌入高度（板顶 0.45m，不随斜堤/建筑探高——彻底保证高度一致），范围城墙内缘→巨构前脸；
-  // 重铺前先拆旧城面板（贴地/嵌入式，alt<0），悬浮平台(alt>0)与桥面/殿宇顶盖板保留；
-  // ② 长桥桥面沿长轴逐 20m 采样、嵌入式铺板（alt=面高-2.8）；③ 哥特殿宇顶面同法盖板。
-  // 探测全部前置（拆旧板之前！碰撞集还是干净状态）、放置全部后置——边探边放会触发 O(n²) 碰撞集重建
-  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
-  ensureColliders();
-  const types = ['fpanel', 'vpanel', 'ipanel', 'mpanel'];
-  const faceOfs = (k) => PANEL_FACE[k] || ((editorProtos[k] && editorProtos[k].userData.thick) || 3.2) - 0.4;
-  const jobs = [];
-  // 已铺检测（桥面/殿宇顶重复点击防叠板）：采样点附近已有铁板且其顶面高≈探测面高＝这次探到的就是那块板
-  const oldPans = placedItems.filter(it => it.scene === 'hive' && PANEL_KEYS.has(it.key));
-  const paved = (x, z, h) => h > -Infinity && oldPans.some(p => {
-    const half = Math.max(1, Math.round(p.scale)) * 10 + 2;
-    return Math.abs(x - p.x) < half && Math.abs(z - p.z) < half && Math.abs(p.root.position.y + 3.2 - h) < 1.8;
-  });
-  // ② 桥面覆板
-  for(const b of placedItems.filter(it => it.scene === 'hive' && (it.key === 'gbridge' || it.key === 'gbridge2'))){
-    const s = b.scale || 1, half = (b.key === 'gbridge' ? 45 : 55) * s - 8;
-    const cs = Math.cos(b.rotY || 0), sn = Math.sin(b.rotY || 0);
-    const dir = (b.key === 'gbridge') ? {x: sn, z: cs} : {x: cs, z: -sn};   // 长轴世界方向
-    for(let d = -half; d <= half; d += 20){
-      const px = b.x + dir.x*d, pz = b.z + dir.z*d;
-      const h = probeSurf(px, pz, 300);
-      if(h === -Infinity || h < 2.5 || paved(px, pz, h)) continue;  // 拱洞缺口/落地引桥段/已铺板跳过
-      const bk = types[Math.floor(Math.random()*4)];
-      jobs.push([bk, +px.toFixed(1), +pz.toFixed(1), b.rotY || 0, 1, {alt: +(h + 0.35 - faceOfs(bk)).toFixed(2)}]);  // 板面统一高出桥面 0.35
-    }
-  }
-  // ③ 哥特殿宇顶面（2×2 盖板）
-  for(const g2 of placedItems.filter(it => it.scene === 'hive' && it.key === 'garch')){
-    const h = probeSurf(g2.x, g2.z, 300);
-    if(h === -Infinity || paved(g2.x, g2.z, h)) continue;
-    const gk = types[Math.floor(Math.random()*4)];
-    jobs.push([gk, g2.x, g2.z, g2.rotY || 0, 2, {alt: +(h + 0.35 - faceOfs(gk)).toFixed(2)}]);
-  }
-  // ① 城内地面：先拆旧城面板（贴地 alt==null 或嵌入 alt<0；桥面/殿宇顶/悬浮平台 alt>0 保留）
-  const prevPave = paveState.cfg;   // 撤销回滚用：本次点击前的地毯配置
-  let nDel = 0; const delList = [];
-  for(let i = placedItems.length - 1; i >= 0; i--){
-    const it = placedItems[i];
-    if(it.scene === 'hive' && PANEL_KEYS.has(it.key) && (it.alt == null || it.alt < 0)){
-      current.group.remove(it.root); placedItems.splice(i, 1); nDel++; delList.push(it);
-    }
-  }
-  // 城内范围（2026-07-20 v3）：城墙全宽（东西到墙两端），南缘顶进斜堤脚，北到 z=-600（巨构占地自动挖空）。
-  // 5m 单板 ≈ 12 万块 → GPU 实例化地毯 buildPave，存档只存种子
-  const wb = new THREE.Box3().setFromObject(hiveWallGroup);
-  const cfg = {seed: (Math.random() * 1e9) | 0, tile: 5,
-    x0: isFinite(wb.min.x) ? Math.ceil(wb.min.x + 6) : -2500,
-    x1: isFinite(wb.max.x) ? Math.floor(wb.max.x - 6) : 2500,
-    z0: -600,
-    z1: isFinite(wb.min.z) ? Math.floor(wb.min.z + 12) : 200};
-  const okPave = buildPave(cfg);
-  if(okPave){ try{ localStorage.setItem(PAVE_LS(), JSON.stringify(cfg)); }catch(e){} }
-  let n = 0; const added = [];
-  for(const j of jobs){ const it2 = editorPlace(j[0], j[1], j[2], j[3], j[4], true, j[5]); if(it2){ n++; added.push(it2); } }
-  if(okPave || delList.length || added.length)
-    pushUndo({label: '一键铺城', adds: added, removes: delList, pave: okPave ? {prev: prevPave, next: cfg} : undefined});
-  editorSave(); editorSyncUI(); shadowDirty = true; collidersScene = null;
-  const nTiles = paveState.meshes.reduce((s, m) => s + m.count, 0);
-  toast(okPave ? ('铺城完成：拆旧板 ' + nDel + ' 件，5m 混拼地毯 ' + nTiles + ' 块铺满城墙内 + 桥面/殿宇顶 ' + n + ' 件')
-               : '地毯构建未就绪（铁板模型还在加载），请稍后再点一次');
-});
-document.getElementById('eaPaveBuildings').addEventListener('click', () => {
-  // 建筑区铺板（2026-08-24 用户要求：有建筑物的区域地面铺满铁板贴片）：
-  // 所有已摆建筑占地盒外扩 12m → 20m 栅格并集 → 行程合并成矩形组 → 追加进贴皮地毯（多矩形 v2）。
-  // 贴皮跟随地形起伏、不压平不碰撞，建筑高度零影响；与已有地毯（如一键铺城）自动去重衔接
-  if(currentId !== 'hive'){ toast('请在蜂巢城场景使用'); return; }
-  const blds = placedItems.filter(it => it.scene === 'hive' && BUILDING_KEYS.has(it.key) && !PANEL_KEYS.has(it.key));
-  if(!blds.length){ toast('本场景还没有摆放建筑物'); return; }
-  const CELL = 20, MARGIN = 12;
-  const cells = new Set();
-  const bb = new THREE.Box3();
-  for(const it of blds){
-    bb.setFromObject(it.root);
-    if(!isFinite(bb.min.x)) continue;
-    const ix0 = Math.floor((bb.min.x - MARGIN) / CELL), ix1 = Math.floor((bb.max.x + MARGIN) / CELL);
-    const iz0 = Math.floor((bb.min.z - MARGIN) / CELL), iz1 = Math.floor((bb.max.z + MARGIN) / CELL);
-    for(let iz = iz0; iz <= iz1; iz++) for(let ix = ix0; ix <= ix1; ix++) cells.add(ix + ':' + iz);
-  }
-  // 行程合并：每行连续格→run，相邻行同跨 run→矩形（把并集压成少量矩形，存档小、恢复快）
-  const rows = new Map();
-  for(const ck of cells){ const [ix, iz] = ck.split(':').map(Number); if(!rows.has(iz)) rows.set(iz, []); rows.get(iz).push(ix); }
-  const runs = [];
-  for(const iz of [...rows.keys()].sort((a, b) => a - b)){
-    const xs = rows.get(iz).sort((a, b) => a - b);
-    let s = xs[0], p = xs[0];
-    for(let i = 1; i <= xs.length; i++){
-      if(i < xs.length && xs[i] === p + 1){ p = xs[i]; continue; }
-      runs.push({iz, s, p});
-      if(i < xs.length){ s = xs[i]; p = xs[i]; }
-    }
-  }
-  const mergedR = [];
-  for(const r of runs){
-    const m2 = mergedR.find(q => q.s === r.s && q.p === r.p && q.iz1 === r.iz - 1);
-    if(m2) m2.iz1 = r.iz; else mergedR.push({s: r.s, p: r.p, iz0: r.iz, iz1: r.iz});
-  }
-  const newRects = mergedR.map(q => [q.s * CELL, q.iz0 * CELL, (q.p + 1) * CELL, (q.iz1 + 1) * CELL]);
-  // 与现有地毯合并（v1 单矩形自动升格 rects）
-  const prev = paveState.cfg;
-  const oldRects = prev ? (prev.rects || [[prev.x0, prev.z0, prev.x1, prev.z1]]) : [];
-  const cfg = {seed: prev ? prev.seed : (Math.random() * 1e9) | 0, tile: 5, rects: oldRects.concat(newRects)};
-  // 体量护栏：贴片数上界估算（重叠按双份计），超 60 万块拒绝——重建与阴影通道会明显卡
-  let est = 0;
-  for(const r of cfg.rects) est += (Math.ceil((r[2] - r[0]) / 5) + 1) * (Math.ceil((r[3] - r[1]) / 5) + 1);
-  if(est > 600000){ toast('铺板估算超 ' + (est / 10000 | 0) + ' 万块，超过上限：先「清空旧贴皮」或减少建筑范围'); return; }
-  const ok = buildPave(cfg);
-  if(!ok){ toast('地毯构建未就绪（铁板模型还在加载），请稍后再点一次'); return; }
-  try{ localStorage.setItem(PAVE_LS(), JSON.stringify(cfg)); }catch(e){}
-  pushUndo({label: '建筑区铺板', pave: {prev, next: cfg}});
-  const nTiles = paveState.meshes.reduce((s2, m3) => s2 + m3.count, 0);
-  toast('建筑区铺板完成：' + blds.length + ' 栋建筑 → 新增 ' + newRects.length + ' 片区域，地毯共 ' + nTiles + ' 块');
 });
 document.getElementById('eaClearPanels').addEventListener('click', () => {
   // 一键清空当前场景全部 3D 地面铁板（2026-07-19 用户要求）
