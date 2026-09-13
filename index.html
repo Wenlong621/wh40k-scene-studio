@@ -286,6 +286,8 @@
         <button data-ea="ncath">⛪ 恢弘圣殿</button>
         <button data-ea="gcath12">⛪ 哥特宏殿</button>
         <button data-ea="gbld2">🏢 哥特楼宇</button>
+        <button data-ea="vcastle">🏰 村庄城堡</button>
+        <button data-ea="village">🏘 中世纪村落</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -390,7 +392,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true, logarithmicDepthBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 上限 2→1.5：高分屏主渲染+辉光后期像素量 -44%（截图导出不受影响，shot() 自设分辨率）
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;   // 2026-09-12 沙丘版：外景亮而蒙尘（旧 1.0/1.1）
+renderer.toneMappingExposure = 1.18;   // 2026-09-12 去乌二调：沙丘=亮而蒙尘，不是暗而浑浊（旧 1.08/1.0/1.1）
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // 阴影按需重绘：默认 autoUpdate 会每帧把全场景（含所有放置的百万面 GLB）画进 8192² 阴影贴图，
@@ -412,7 +414,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const GradeShader = {
   // 2026-09-04 参考图重制（银灰碳黑 grimdark 概念图）：低饱和银灰基底 + 冷板岩暗部/暖金高光分离
   // + 深黑位 + 重暗角。旧 SM2 冷亮版参数备档：S曲线0.22、无去饱和、分离(−.018,.004,.030)×0.7、vig 0.42
-  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.52}, grain:{value:0.045} },
+  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.38}, grain:{value:0.028} },   // 2026-09-12 去乌：重暗角+浓颗粒是"发乌"帮凶（旧 0.52/0.045）
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     uniform sampler2D tDiffuse; uniform float time, vig, grain;
@@ -421,13 +423,13 @@ const GradeShader = {
     void main(){
       vec3 col = texture2D(tDiffuse, vUv).rgb;
       vec3 t = clamp(col, 0.0, 1.0);
-      col += (t*t*(3.0-2.0*t) - t)*0.30;                           // 胶片S曲线加深（HDR安全：>1区域增量为0）
+      col += (t*t*(3.0-2.0*t) - t)*0.22;                           // 胶片S曲线（0.30 压中间调发乌，回到 0.22；HDR安全：>1区域增量为0）
       float l = clamp(dot(col, vec3(0.299,0.587,0.114)), 0.0, 1.0);
       col = mix(col, vec3(l), 0.12);                               // 轻降饱和（沙丘=低饱和但全暖色相）
       col *= vec3(1.075, 1.010, 0.885);                            // 沙丘琥珀基调：全画面罩一层沙金（2026-09-12 用户定向"更像沙丘"）
       col += (0.5-l)*vec3(0.020, 0.008, -0.022);                   // 暗部转暖棕——沙丘的阴影也是暖的，冷青暗部正是"发灰"元凶
       col += smoothstep(0.35, 1.0, l)*vec3(0.085, 0.052, -0.030); // 中高光奶油沙白：尘雾里的漫射日光
-      col = max(col - 0.012, 0.0)*1.02;                            // 黑位下沉：碳黑但不糊死
+      col = max(col - 0.006, 0.0)*1.02;                            // 黑位轻沉（0.012 减半：连同重S曲线一起把画面拖乌）
       float d = distance(vUv, vec2(0.5));
       col *= 1.0 - vig*smoothstep(0.28, 0.86, d);                  // 暗角加重加宽
       col += (rnd(vUv*vec2(1923.0,1083.0)+fract(time)*7.0)*2.0-1.0)*grain*0.5; // 颗粒
@@ -1692,7 +1694,7 @@ function buildHive(){
 
   // 单一日光源：低角度残阳作唯一主光（与天幕残阳同向），环境光压到只托底影调——
   // 受光面/背光面拉开反差才有"日照感"；旧版 hemi 3.4 + 南侧补光 = 四面都亮的棚拍光，已删
-  const hemi = new THREE.HemisphereLight(0xc9b795, 0x382d20, 2.2); g.add(hemi);  // 沙丘暖沙漫射（2026-09-12；SM2 冷版 0x9fb0b5/0x24272a、旧暖版 0xcabba8/0x2b241c）
+  const hemi = new THREE.HemisphereLight(0xd6c4a2, 0x3f331f, 2.6); g.add(hemi);  // 沙丘暖沙漫射·去乌加亮（2026-09-12 二调 2.2→2.6；SM2 冷版 0x9fb0b5/0x24272a）
   const sun = new THREE.DirectionalLight(0xffe2b4, 7.2);   // 琥珀日光（2026-09-12 沙丘版；SM2 近白 0xfff0dc、旧暖版 0xffe3c4）
   // 光源方位对齐穹顶亮黄贴图：u=0.32 → 世界方向 (+0.427,+0.905)=东南偏南，仰角 ~13°。
   // 全图阴影：光源位拉到地图外（东南上方 4200m 处），正交盒 ±2900 罩住整张 5200m 地面，
@@ -2631,11 +2633,11 @@ function applyHiveLightMode(mode){
   if(!hiveSun || !hiveHemi) return;
   if(mode === 'studio'){
     hiveSun.intensity = 2.2; hiveSun.castShadow = false;
-    hiveHemi.intensity = 4.6;
+    hiveHemi.intensity = 5.0;
     for(const f of hiveFills) f.visible = true;
   } else {
     hiveSun.intensity = 7.2; hiveSun.castShadow = true;
-    hiveHemi.intensity = 2.2;
+    hiveHemi.intensity = 2.6;
     for(const f of hiveFills) f.visible = false;
   }
   shadowDirty = true;
@@ -2893,6 +2895,8 @@ loadEditorProp('astat',    'assets/armored_statue.glb',            45, false, '�
 loadEditorProp('fstat',    'assets/fantasy_statue.glb',            45, false, '奇幻雕像');   // 2026-08-28 入库：奇幻立像按高 45m（占地≈18×19m），精细档 391k 面
 loadEditorProp('gcath12',  'assets/gothic_cathedral13.glb',       120, true,  '哥特宏殿');   // 2026-09-04 入库：宽体大殿按占地宽 120m（高≈94m），精细档 365k 面（源文件编号(13)，键号接续 gcath12）
 loadEditorProp('gbld2',    'assets/gothic_building2.glb',          75, false, '哥特楼宇');   // 2026-09-10 入库：竖高楼体按高 75m（占地≈44×33m），精细档 367k 面
+loadEditorProp('vcastle',  'assets/medieval_castle.glb',          130, true,  '村庄城堡');   // 2026-09-12 入库：村堡建筑群按占地宽 130m（高≈99m），精细档 371k 面
+loadEditorProp('village',  'assets/medieval_village.glb',         150, true,  '中世纪村落'); // 2026-09-12 入库：村落建筑群按占地宽 150m（高≈104m 含塔楼），精细档 379k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2922,7 +2926,8 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'ifort', 'sfort', 'fstair', 'dwall', 'tstair', 'icath', 'gcath5', 'gcath6', 'gcath7', 'gcath8', 'gcath9', 'arena', 'shead',
   'dtcath', 'dtface', 'ftower', 'dtarch', 'hfort', 'igate', 'medic',
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
-  'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
+  'vcastle', 'village']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
