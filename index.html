@@ -390,7 +390,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true, logarithmicDepthBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 上限 2→1.5：高分屏主渲染+辉光后期像素量 -44%（截图导出不受影响，shot() 自设分辨率）
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;   // 2026-09-04 参考图重制：压一档换更深的影调（旧 1.1）
+renderer.toneMappingExposure = 1.08;   // 2026-09-12 沙丘版：外景亮而蒙尘（旧 1.0/1.1）
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // 阴影按需重绘：默认 autoUpdate 会每帧把全场景（含所有放置的百万面 GLB）画进 8192² 阴影贴图，
@@ -423,10 +423,10 @@ const GradeShader = {
       vec3 t = clamp(col, 0.0, 1.0);
       col += (t*t*(3.0-2.0*t) - t)*0.30;                           // 胶片S曲线加深（HDR安全：>1区域增量为0）
       float l = clamp(dot(col, vec3(0.299,0.587,0.114)), 0.0, 1.0);
-      col = mix(col, vec3(l), 0.10);                               // 轻降饱和（首版 28% 全画面发灰被用户否掉）
-      col *= vec3(1.045, 1.005, 0.945);                            // 全局金黄暖平衡：参考图的灵魂是暖调不是灰调
-      col += (0.5-l)*vec3(-0.016, -0.002, 0.018);                  // 暗部微冷（只留一点板岩青衬托暖光）
-      col += smoothstep(0.42, 1.0, l)*vec3(0.10, 0.060, -0.038);  // 中高光强暖金：受光面/灯火/云隙光全面镀金
+      col = mix(col, vec3(l), 0.12);                               // 轻降饱和（沙丘=低饱和但全暖色相）
+      col *= vec3(1.075, 1.010, 0.885);                            // 沙丘琥珀基调：全画面罩一层沙金（2026-09-12 用户定向"更像沙丘"）
+      col += (0.5-l)*vec3(0.020, 0.008, -0.022);                   // 暗部转暖棕——沙丘的阴影也是暖的，冷青暗部正是"发灰"元凶
+      col += smoothstep(0.35, 1.0, l)*vec3(0.085, 0.052, -0.030); // 中高光奶油沙白：尘雾里的漫射日光
       col = max(col - 0.012, 0.0)*1.02;                            // 黑位下沉：碳黑但不糊死
       float d = distance(vUv, vec2(0.5));
       col *= 1.0 - vig*smoothstep(0.28, 0.86, d);                  // 暗角加重加宽
@@ -1512,7 +1512,7 @@ function buildHive(){
   if(GROUND_PLAIN){
     // 纯土色：无贴图、无花纹、无顶点色（起伏地形/阴影/高度雾照常）。
     // 暖色日光+调色会把红抬起来，albedo 压低红分量才出"土黄"而不是红陶土
-    groundM = mat({color:0x3d3b36, roughness:1});   // 深碳灰土（2026-09-04 参考图重制压暗一档；SM2 亮版 0x4d4a43、旧暖土黄 0x564a3b）
+    groundM = mat({color:0x4c4133, roughness:1});   // 暖沙棕土（2026-09-12 沙丘版；深碳灰 0x3d3b36、SM2 亮版 0x4d4a43、旧暖土黄 0x564a3b）
   } else {
   // ① 顶点色宏观变化：焦黑烧灼带 / 灰烬浅斑 / 锈渍偏色 + 低洼沉暗，打破 3km 单色
   const vcol = new Float32Array(gPos.count*3);
@@ -1692,8 +1692,8 @@ function buildHive(){
 
   // 单一日光源：低角度残阳作唯一主光（与天幕残阳同向），环境光压到只托底影调——
   // 受光面/背光面拉开反差才有"日照感"；旧版 hemi 3.4 + 南侧补光 = 四面都亮的棚拍光，已删
-  const hemi = new THREE.HemisphereLight(0x9fb0b5, 0x24272a, 2.2); g.add(hemi);  // 冷调蓝灰漫射（2026-07-26 SM2 参考图重制：亮而清冽；旧暖版 0xcabba8/0x2b241c/2.3）
-  const sun = new THREE.DirectionalLight(0xfff0dc, 7.2);   // 近白主光微暖（2026-07-26 SM2 重制：石面出亮白高光；旧暖版 0xffe3c4/6.3）
+  const hemi = new THREE.HemisphereLight(0xc9b795, 0x382d20, 2.2); g.add(hemi);  // 沙丘暖沙漫射（2026-09-12；SM2 冷版 0x9fb0b5/0x24272a、旧暖版 0xcabba8/0x2b241c）
+  const sun = new THREE.DirectionalLight(0xffe2b4, 7.2);   // 琥珀日光（2026-09-12 沙丘版；SM2 近白 0xfff0dc、旧暖版 0xffe3c4）
   // 光源方位对齐穹顶亮黄贴图：u=0.32 → 世界方向 (+0.427,+0.905)=东南偏南，仰角 ~13°。
   // 全图阴影：光源位拉到地图外（东南上方 4200m 处），正交盒 ±2900 罩住整张 5200m 地面，
   // 8192² 阴影贴图 ≈0.71m/texel（若显卡吃力可降回 4096）
@@ -1709,10 +1709,10 @@ function buildHive(){
   hiveSun = sun;   // 阴影取景框动态跟随（updateMove 里按视角高度缩放正交盒）
   hiveHemi = hemi;
   // 摄影棚补光组（默认隐藏，studio 模式点亮）：背向/侧向两盏无影平行光把背光面填平
-  const fillA = new THREE.DirectionalLight(0xdfe6ee, 2.0);
+  const fillA = new THREE.DirectionalLight(0xe6d6ba, 2.0);   // 2026-09-12 沙丘版补光转暖（旧冷 0xdfe6ee）
   fillA.position.set(-1747, 2600, -3905); fillA.target.position.set(0, 0, 0);
   g.add(fillA); g.add(fillA.target);
-  const fillB = new THREE.DirectionalLight(0xe8e4da, 1.5);
+  const fillB = new THREE.DirectionalLight(0xeadfc6, 1.5);   // 2026-09-12 沙丘版补光转暖（旧 0xe8e4da）
   fillB.position.set(2600, 2000, 900); fillB.target.position.set(0, 0, 205);
   g.add(fillB); g.add(fillB.target);
   fillA.visible = fillB.visible = false;
