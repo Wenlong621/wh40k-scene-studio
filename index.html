@@ -2182,6 +2182,7 @@ let locked = false;
 ============================================================ */
 let viewMode = 'free';        // 'free' | 'fps' | 'tps'
 let tpsDist = 6.5;            // 第三人称镜头后拉距离
+const TPS_FRAME_Y = 0.22;     // 2026-09-15 用户要求主角在画面靠下：相机沿吊臂抬高 22%×距离（视线方向不变→角色下移约 18% 画幅）
 // 模型正面朝 +X 轴（实测：脚趾朝+X、右肩朝+Z）；π/2 使其面向 -Z，背朝默认相机（+Z），即默认看到背包
 let modelFacing = Math.PI/2;
 let turntable = false;        // 自动环视（相机绕主角匀速旋转）
@@ -3632,6 +3633,7 @@ function updateTpsBoom(){
     if(cy < g) d = Math.max(0.05, d - (g - cy)/(-_boomDir.y));
   }
   camera.position.z = d;
+  camera.position.y = d * TPS_FRAME_Y;   // 吊臂收短时构图偏移同比例缩，贴脸不穿模
   // 杆收得太短=镜头已进入人物体内：隐藏主角模型（TPS 游戏标准配套），拉远自动恢复
   const bodyVis = d > 1.1;
   if(playerChar === 'ultra'){ if(player.model && player.loaded) player.model.visible = bodyVis; }
@@ -3667,7 +3669,7 @@ function applyViewMode(mode){
     if(player.model) player.model.visible = (playerChar === 'ultra');
     charHolder.visible = (playerChar !== 'ultra');
     hideAllWeapons();
-    camera.position.set(0, 0, tpsDist);      // 镜头后拉到背后
+    camera.position.set(0, tpsDist*TPS_FRAME_Y, tpsDist);      // 镜头后拉到背后（Y 抬高=主角画面靠下构图）
     eyeHeight = 2.0;                          // 枢轴抬到胸口高度
     camera.near = 0.1;
     player.activeBones = (playerChar === 'ultra') ? player.bones : (charBones || {});
@@ -5232,7 +5234,7 @@ document.getElementById('facing').addEventListener('input', e => {
 document.getElementById('tpsDist').addEventListener('input', e => {
   tpsDist = +e.target.value/10;
   document.getElementById('tpsDistVal').textContent = tpsDist.toFixed(1);
-  if(viewMode==='tps') camera.position.z = tpsDist;
+  if(viewMode==='tps'){ camera.position.z = tpsDist; camera.position.y = tpsDist*TPS_FRAME_Y; }
 });
 
 /* 第一人称机位可视化调整：滑块实时生效，「保存机位」写入 localStorage（刷新仍生效） */
