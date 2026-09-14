@@ -1228,7 +1228,7 @@ function injectAerialFog(m){
   vec3 fdv = vMegaW - cameraPosition;
   float fDist = max(length(fdv), 0.001);
   vec3 fRd = fdv / fDist;
-  float fB = 0.0055;                                    // 高度衰减（~180m 一个 e 折）
+  float fB = 0.0004;                                    // 高度衰减（~2500m 一个 e 折；2026-09-15 用户要求全高度覆盖，旧 0.0055≈180m 高塔全露）
   float fA = 0.00030 * uMegaFog * uMegaFog;             // 平方曲线：1.0 标准、2.0=真·浓雾天（近中景空气可见）
   float fRy = (abs(fRd.y) < 0.001) ? 0.001 : fRd.y;
   float fAmt = (fA / fB) * exp(-cameraPosition.y * fB) * (1.0 - exp(-fDist * fRy * fB)) / fRy;
@@ -1249,7 +1249,7 @@ function spriteFogAmt(sp, baseCol){
   sp.getWorldPosition(_fogDv).sub(_fogCam);
   const d = Math.max(_fogDv.length(), 0.001);
   let ry = _fogDv.y / d; if(Math.abs(ry) < 0.001) ry = 0.001;
-  const fB = 0.0055, fA = 0.0003 * fogMulCur * fogMulCur;
+  const fB = 0.0004, fA = 0.0003 * fogMulCur * fogMulCur;   // fB 与注入器同步（全高度覆盖）
   const amt = (fA / fB) * Math.exp(-_fogCam.y * fB) * (1 - Math.exp(-d * ry * fB)) / ry;
   const fF = Math.min(1 - Math.exp(-Math.max(amt, 0)), 1);
   const fSun = Math.pow(Math.max((_fogDv.x*0.327 + _fogDv.y*0.643 + _fogDv.z*0.693) / d, 0), 7);

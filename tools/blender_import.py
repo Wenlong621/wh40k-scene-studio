@@ -296,8 +296,8 @@ if FOG != 'off':
     fbm.to_mesh(fme)
     fbm.free()
     fog_ob = bpy.data.objects.new('fog', fme)
-    fog_ob.scale = (16000, 16000, 450)
-    fog_ob.location = (0, 0, 225)
+    fog_ob.scale = (16000, 16000, 3000)   # 2026-09-15 与实时端同步全高度覆盖（旧 450m 高塔出雾）
+    fog_ob.location = (0, 0, 1500)
     fmat = bpy.data.materials.new('fog')
     fmat.use_nodes = True
     fnt = fmat.node_tree
