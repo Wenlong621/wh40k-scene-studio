@@ -396,7 +396,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true, preserveDrawingBuffer:true, logarithmicDepthBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // 上限 2→1.5：高分屏主渲染+辉光后期像素量 -44%（截图导出不受影响，shot() 自设分辨率）
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;   // 2026-09-12 去乌二调：沙丘=亮而蒙尘，不是暗而浑浊（旧 1.08/1.0/1.1）
+renderer.toneMappingExposure = 1.32;   // 2026-09-13 三调再提亮（用户"还是有点过暗"；旧 1.18/1.08/1.0/1.1）
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // 阴影按需重绘：默认 autoUpdate 会每帧把全场景（含所有放置的百万面 GLB）画进 8192² 阴影贴图，
@@ -418,7 +418,7 @@ scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 const GradeShader = {
   // 2026-09-04 参考图重制（银灰碳黑 grimdark 概念图）：低饱和银灰基底 + 冷板岩暗部/暖金高光分离
   // + 深黑位 + 重暗角。旧 SM2 冷亮版参数备档：S曲线0.22、无去饱和、分离(−.018,.004,.030)×0.7、vig 0.42
-  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.38}, grain:{value:0.028} },   // 2026-09-12 去乌：重暗角+浓颗粒是"发乌"帮凶（旧 0.52/0.045）
+  uniforms:{ tDiffuse:{value:null}, time:{value:0}, vig:{value:0.30}, grain:{value:0.028} },   // 2026-09-13 三调暗角再减 0.38→0.30（旧 0.52/0.045）
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     uniform sampler2D tDiffuse; uniform float time, vig, grain;
