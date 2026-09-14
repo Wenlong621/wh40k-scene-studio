@@ -291,6 +291,7 @@
         <button data-ea="hvillage">⛰ 山丘村落</button>
         <button data-ea="mansion">🏛 城堡宅邸</button>
         <button data-ea="sbridge">🌉 石桥</button>
+        <button data-ea="sbridge2">🪜 阶梯石桥</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -2903,6 +2904,7 @@ loadEditorProp('village',  'assets/medieval_village.glb',         150, true,  '�
 loadEditorProp('hvillage', 'assets/hill_village.glb',             140, true,  '山丘村落');   // 2026-09-13 入库：山地村落群按占地宽 140m（高≈96m），精细档 370k 面
 loadEditorProp('mansion',  'assets/castle_mansion.glb',           110, true,  '城堡宅邸');   // 2026-09-13 入库：宅邸建筑群按占地宽 110m（高≈76m），精细档 361k 面
 loadEditorProp('sbridge',  'assets/stone_bridge.glb',             110, true,  '石桥');       // 2026-09-13 入库：低平长跨石桥按占地宽 110m（高≈15m，桥面宽≈44m），精细档 383k 面
+loadEditorProp('sbridge2', 'assets/stair_bridge.glb',              60, false, '阶梯石桥');   // 2026-09-13 入库：竖高阶梯桥按高 60m（占地≈47×45m），精细档 379k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2933,7 +2935,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'dtcath', 'dtface', 'ftower', 'dtarch', 'hfort', 'igate', 'medic',
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
   'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
-  'vcastle', 'village', 'hvillage', 'mansion', 'sbridge']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'vcastle', 'village', 'hvillage', 'mansion', 'sbridge', 'sbridge2']);   // 「建筑物细节」板块与后续入库件：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
