@@ -355,7 +355,7 @@
       <div class="row"><label>缩放</label><input type="range" id="eaScale" min="5" max="500" value="100"><span class="val" id="eaScaleVal">1.00</span></div>
       <div class="row"><label>朝向</label><input type="range" id="eaRot" min="0" max="360" value="0"><span class="val" id="eaRotVal">0</span></div>
       <div class="row"><label>仰角</label><input type="range" id="eaTilt" min="-60" max="60" value="0"><span class="val" id="eaTiltVal">0</span></div>
-      <div class="row"><label>高度</label><input type="range" id="eaAlt" min="0" max="10000" value="420"><span class="val" id="eaAltVal">420</span></div><!-- 2026-08-25 用户要求上限 1200→10000m；点数字可输精确值 -->
+      <div class="row"><label>高度</label><input type="range" id="eaAlt" min="-2000" max="10000" value="420"><span class="val" id="eaAltVal">420</span></div><!-- 2026-09-16 允许负值=底座沉入地下（半埋废墟）；0=贴地；上限 10000m；点数字可输精确值 -->
       <div class="aspect-btns" style="margin-top:4px;">
         <button id="eaUndo">↩ 撤销上一步</button>
         <button id="eaCopy">📋 复制</button>
@@ -3173,7 +3173,7 @@ function rebuildColliders(){
     if(it.scene !== currentId) continue;
     if(PANEL_KEYS.has(it.key)){
       if(it.alt == null) continue;                 // 贴地铁板=地表贴皮，不碰撞（角色站真实地面）
-    } else if(it.alt != null) continue;            // 空中体积云/悬浮件不参与碰撞；悬浮铁板=平台可站立
+    } else if(it.alt != null && it.alt > 0) continue;   // 空中体积云/悬浮件不参与碰撞；悬浮铁板=平台可站立；下沉件(alt<0)=半埋废墟保留碰撞
 
     it.root.updateWorldMatrix(true, true);
     let hasSkin = false;
@@ -4712,10 +4712,10 @@ document.getElementById('eaTilt').addEventListener('input', e => {
 document.getElementById('eaAlt').addEventListener('input', e => {
   const v = +e.target.value;
   document.getElementById('eaAltVal').textContent = v;
-  // 敌对角色/建筑：>0＝悬浮在绝对高度（不参与碰撞，同云），0＝回到贴地
+  // 敌对角色/建筑：>0＝悬浮在绝对高度（不参与碰撞，同云），0＝回到贴地，<0＝下沉嵌地（半埋废墟，保留碰撞）
   const hoverGhost = editGhost && !editGhost.item && canHover(editGhost.key);
   if(editGhost && !editGhost.item && (hoverGhost || (editGhost.root.userData && editGhost.root.userData.alt != null))){
-    if(hoverGhost && v <= 0){
+    if(hoverGhost && v === 0){
       editGhost.root.userData.alt = null;
       editGhost.root.position.y = -panelSink(editGhost.key) +
         editorSnapY(editGhost.root.position.x, editGhost.root.position.z, editGhost.root,
@@ -4723,7 +4723,7 @@ document.getElementById('eaAlt').addEventListener('input', e => {
         +document.getElementById('eaScale').value/100, editGhost.key);
     } else { editGhost.root.userData.alt = v; editGhost.root.position.y = v; }
   } else if(editSelected && !editSelected.sys && canHover(editSelected.key)){
-    editSelected.alt = v > 0 ? v : null;
+    editSelected.alt = (v !== 0) ? v : null;   // 负值=下沉嵌地
     editorApply(editSelected); editorSave(); updateSelRing();
   } else if(editSelected && editSelected.alt != null){
     editSelected.alt = v; editorApply(editSelected); editorSave(); updateSelRing();
