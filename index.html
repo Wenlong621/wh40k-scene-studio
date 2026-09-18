@@ -3235,13 +3235,15 @@ function buildPave(cfg){
   ensureColliders();
   const megaC = colliders.find(c => c.kind === 'mega');
   const rnd = mulberry32(cfg.seed);
-  const T = cfg.tile || 5;
-  // v2 多矩形（2026-08-24 建筑区铺板）：cfg.rects=[[x0,z0,x1,z1]...]；v1 单矩形自动升格。
-  // 贴片对齐全局 5m 点阵（不再相对 x0），矩形重叠/相邻处按点阵键去重不叠板
+  const T0 = cfg.tile || 5;
+  // v2 多矩形（2026-08-24）：cfg.rects=[[x0,z0,x1,z1,tile?]...]；v1 单矩形自动升格。
+  // 贴片对齐各自板幅的全局点阵；矩形重叠/相邻处按点阵键去重不叠板。
+  // v3（2026-09-17）：矩形第 5 元=该区板幅（外围城区用 15m 大板控制总量，核心区保持 5m 精板）
   const rects = cfg.rects || [[cfg.x0, cfg.z0, cfg.x1, cfg.z1]];
-  const lists = [[], [], [], []];
+  const lists = new Map();   // 'ti|T' -> [x,z,rot ...]
   const seen = new Set();
   for(const r of rects){
+    const T = r[4] || T0;
     const rx0 = Math.ceil(r[0] / T) * T, rz0 = Math.ceil(r[1] / T) * T;
     for(let z = rz0; z <= r[3]; z += T) for(let x = rx0; x <= r[2]; x += T){
       const ti = (rnd() * 4) | 0, rot = ((rnd() * 4) | 0) * Math.PI / 2;   // 先耗随机数再排除，保证确定性
@@ -3249,7 +3251,9 @@ function buildPave(cfg){
       if(seen.has(ck)) continue;
       seen.add(ck);
       if(megaC && x > megaC.box.min.x - 2 && x < megaC.box.max.x + 2 && z > megaC.box.min.z - 2 && z < megaC.box.max.z + 2) continue;
-      lists[ti].push(x, z, rot);
+      const lk = ti + '|' + T;
+      if(!lists.has(lk)) lists.set(lk, []);
+      lists.get(lk).push(x, z, rot);
     }
   }
   // 2026-07-24 改贴皮：铁板不再是 3D 实体，而是贴着地形的平面贴图（法线对齐坡面 + polygonOffset 防闪面）。
@@ -3257,21 +3261,22 @@ function buildPave(cfg){
   const q = new THREE.Quaternion(), qy = new THREE.Quaternion(), e = new THREE.Euler(),
         p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1), mt = new THREE.Matrix4(),
         up = new THREE.Vector3(0, 1, 0), nrm = new THREE.Vector3();
-  for(let i = 0; i < 4; i++){
-    const tex = bakePanelTop(types[i]); if(!tex){ clearPave(); return false; }
-    const geo = new THREE.PlaneGeometry(T - 0.04, T - 0.04);   // 0.04 缝隙=板与板分界暗线
+  for(const [lk, a] of lists){
+    const ti = +lk.split('|')[0], T = +lk.split('|')[1];
+    const tex = bakePanelTop(types[ti]); if(!tex){ clearPave(); return false; }
+    const geo = new THREE.PlaneGeometry(T - 0.04 * T / 5, T - 0.04 * T / 5);   // 缝隙随板幅等比=分界暗线粗细一致
     geo.rotateX(-Math.PI / 2);                                  // 躺平面朝上
     const mat = new THREE.MeshStandardMaterial({map: tex, roughness: 0.78, metalness: 0.55,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2});
     injectAerialFog(mat);   // 2026-07-26 贴皮融入高度雾（实例化世界坐标已在注入器内处理）
-    const im = new THREE.InstancedMesh(geo, mat, lists[i].length / 3);
+    const im = new THREE.InstancedMesh(geo, mat, a.length / 3);
     im.castShadow = false; im.receiveShadow = true;
-    const a = lists[i];
+    const off = T * 0.48;   // 9 点采样跨度随板幅等比（5m 板=±2.4 原值）
     for(let j = 0, n = a.length / 3; j < n; j++){
       const x = a[j*3], z = a[j*3+1];
       // 取 9 点局部最高地形＝贴片永不被起伏地面盖住（洼地边缘略悬 0.1-0.3m，远看无感）
       let h = -Infinity;
-      for(const [ox, oz] of [[0,0],[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4],[-2.4,0],[2.4,0]])
+      for(const [ox, oz] of [[0,0],[-off,-off],[off,-off],[-off,off],[off,off],[0,-off],[0,off],[-off,0],[off,0]])
         h = Math.max(h, current.terrain(x + ox, z + oz));
       p.set(x, h + 0.06, z);
       // 法线对齐地形坡面（±2m 梯度采样），再叠加随机朝向
@@ -3296,20 +3301,22 @@ function paveTopAt(x, z, fromY){
   // 复刻 buildPave 的 9 点局部最高地形 +0.06，角色支撑面=皮面本身；无侧向阻挡（皮无厚度）
   const c = paveState.cfg;
   if(!c || currentId !== 'hive' || !current || !current.terrain) return -Infinity;
-  const T = c.tile || 5;
+  const T0 = c.tile || 5;
   const rects = c.rects || [[c.x0, c.z0, c.x1, c.z1]];   // v2 多矩形兼容
-  let inRect = false;
+  let T = 0;
   for(const r of rects){
-    if(x >= r[0] - T && x <= r[2] + T && z >= r[1] - T && z <= r[3] + T){ inRect = true; break; }
+    const rt = r[4] || T0;   // v3：每区独立板幅
+    if(x >= r[0] - rt && x <= r[2] + rt && z >= r[1] - rt && z <= r[3] + rt){ T = rt; break; }
   }
-  if(!inRect) return -Infinity;
+  if(!T) return -Infinity;
   const m = colliders.find(k => k.kind === 'mega');
   if(m && x > m.box.min.x - 2 && x < m.box.max.x + 2 && z > m.box.min.z - 2 && z < m.box.max.z + 2) return -Infinity;
-  // 所在贴片的中心（全局 5m 点阵，与 buildPave v2 同一对齐），同款 9 点最高采样
+  // 所在贴片的中心（该区板幅的全局点阵，与 buildPave 同一对齐），同款 9 点最高采样
   const xc = Math.round(x / T) * T;
   const zc = Math.round(z / T) * T;
   let h = -Infinity;
-  for(const [ox, oz] of [[0,0],[-2.4,-2.4],[2.4,-2.4],[-2.4,2.4],[2.4,2.4],[0,-2.4],[0,2.4],[-2.4,0],[2.4,0]])
+  const off = T * 0.48;   // 采样跨度随板幅（与 buildPave 同步）
+  for(const [ox, oz] of [[0,0],[-off,-off],[off,-off],[-off,off],[off,off],[0,-off],[0,off],[-off,0],[off,0]])
     h = Math.max(h, current.terrain(xc + ox, zc + oz));
   const t = h + 0.06;
   if(fromY != null && t > fromY) return -Infinity;   // 只响应自上而下的探测
@@ -5075,14 +5082,29 @@ document.getElementById('eaClearClouds').addEventListener('click', () => {
 
 // ── 布局远程修补：一次性、按补丁号幂等（用户在自己浏览器里的存档，只能靠代码补丁远程改）──
 // #1 (2026-07-24)：移除 (300,-650) 叠放的两艘虫族母舰（用户要求去掉桥边这艘；布景按钮点两次叠出）
-const LAYOUT_PATCH = 1;
+// #2 (2026-09-17)：铁板贴皮铺满全城地面——实测用户城墙在 z∈[23,176]（ry=π 把偏移转回），
+//     建筑城区密集带北抵 z≈-4500；旧贴皮 z∈[-600,35] 只盖核心区。改两区 v3 配置：
+//     核心区 [-5909,-600,5869,176] 保持 5m 精板（花纹随全局点阵基本连续），
+//     北部城区 [-5909,-4500,5869,-600] 用 15m 大板（控制总量 ~57 万块）
+const LAYOUT_PATCH = 2;
 (function applyLayoutPatch(){
   try{
-    if((+localStorage.getItem('wh40k_patch') || 0) >= LAYOUT_PATCH) return;
-    const k = 'wh40k_layout_hive';
-    const list = JSON.parse(localStorage.getItem(k) || '[]');
-    const filtered = list.filter(o => !(o.key === 'emship' && Math.abs(o.x - 300) < 5 && Math.abs(o.z + 650) < 5));
-    if(filtered.length !== list.length) localStorage.setItem(k, JSON.stringify(filtered));
+    const cur = +localStorage.getItem('wh40k_patch') || 0;
+    if(cur >= LAYOUT_PATCH) return;
+    if(cur < 1){
+      const k = 'wh40k_layout_hive';
+      const list = JSON.parse(localStorage.getItem(k) || '[]');
+      const filtered = list.filter(o => !(o.key === 'emship' && Math.abs(o.x - 300) < 5 && Math.abs(o.z + 650) < 5));
+      if(filtered.length !== list.length) localStorage.setItem(k, JSON.stringify(filtered));
+    }
+    if(cur < 2){
+      const pk = 'wh40k_pave_hive';
+      const cfg = JSON.parse(localStorage.getItem(pk) || 'null');
+      if(cfg && !cfg.rects){
+        localStorage.setItem(pk, JSON.stringify({seed: cfg.seed, tile: cfg.tile || 5,
+          rects: [[-5909, -600, 5869, 176], [-5909, -4500, 5869, -600, 15]]}));
+      }
+    }
     localStorage.setItem('wh40k_patch', String(LAYOUT_PATCH));
   }catch(e){}
 })();
@@ -5103,11 +5125,14 @@ const IS_LOCAL_HOST = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 function syncLS(){
   const s = collectLS();
   if(s === _bakLast || s === '{}') return;
+  // 近空护栏（2026-09-17）：QC/新开面板的近空 LS 曾三次把全量备份（~360KB）冲成几百字节——
+  // 真实存档远大于 50KB，小于它的一律不回写（宁可少备份一次，不可清空唯一备份）
+  if(s.length < 50000) return;
   fetch('/layout?name=backup', {method:'POST', body:s}).then(r => { if(r.ok) _bakLast = s; }).catch(()=>{});
 }
 if(IS_LOCAL_HOST){   // 云端静态托管无 /layout 端点，盲发只会每 10s 刷一条 405
   setInterval(syncLS, 10000);   // 10s 差异检查，仅变化时才发（几十 KB 本地 POST，异步不占帧）
-  window.addEventListener('pagehide', () => { try{ navigator.sendBeacon('/layout?name=backup', collectLS()); }catch(e){} });
+  window.addEventListener('pagehide', () => { try{ const s = collectLS(); if(s.length >= 50000) navigator.sendBeacon('/layout?name=backup', s); }catch(e){} });   // 同款近空护栏
 }
 // ── 云端版布局备份/恢复：内容只存在浏览器缓存里，清一次浏览数据就全没——给用户一条手动逃生通道 ──
 document.getElementById('layoutDownload').addEventListener('click', () => {
@@ -5137,7 +5162,7 @@ document.getElementById('layoutRestore').addEventListener('click', () => {
   };
   inp.click();
 });
-fetch('layouts/backup.json').then(r => r.ok ? r.json() : null).then(bak => {
+fetch('layouts/backup.json', {cache:'no-store'}).then(r => r.ok ? r.json() : null).then(bak => {   // no-store：曾吃到陈旧缓存导致恢复空转（2026-09-17）
   if(!bak) return;
   let n = 0;
   for(const k in bak) if(localStorage.getItem(k) == null){ localStorage.setItem(k, bak[k]); n++; }
