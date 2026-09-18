@@ -5088,7 +5088,10 @@ document.getElementById('eaClearClouds').addEventListener('click', () => {
 //     建筑城区密集带北抵 z≈-4500；旧贴皮 z∈[-600,35] 只盖核心区。改两区 v3 配置：
 //     核心区 [-5909,-600,5869,176] 保持 5m 精板（花纹随全局点阵基本连续），
 //     北部城区 [-5909,-4500,5869,-600] 用 15m 大板（控制总量 ~57 万块）
-const LAYOUT_PATCH = 2;
+// #3 (2026-09-18)：巨构山后移+放大（用户要求：距前排大教堂 4 倍距离、体积 2 倍）——
+//     参照 ncath(-535,-379)，原 mega(-711,-501.5) 距离 214m → 新位 (-1239,-869)、缩放 0.73→1.46；
+//     仅当 mega 仍在原位附近才改（用户自己挪过就不动）
+const LAYOUT_PATCH = 3;
 (function applyLayoutPatch(){
   try{
     const cur = +localStorage.getItem('wh40k_patch') || 0;
@@ -5105,6 +5108,14 @@ const LAYOUT_PATCH = 2;
       if(cfg && !cfg.rects){
         localStorage.setItem(pk, JSON.stringify({seed: cfg.seed, tile: cfg.tile || 5,
           rects: [[-5909, -600, 5869, 176], [-5909, -4500, 5869, -600, 15]]}));
+      }
+    }
+    if(cur < 3){
+      const sk = 'wh40k_sys_hive';
+      const sys = JSON.parse(localStorage.getItem(sk) || 'null');
+      if(sys && sys.mega && Math.abs(sys.mega.x + 711) < 60 && Math.abs(sys.mega.z + 501.5) < 60){
+        sys.mega.x = -1239; sys.mega.z = -869; sys.mega.s = +(sys.mega.s * 2).toFixed(3);
+        localStorage.setItem(sk, JSON.stringify(sys));
       }
     }
     localStorage.setItem('wh40k_patch', String(LAYOUT_PATCH));
