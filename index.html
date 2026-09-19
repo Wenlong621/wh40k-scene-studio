@@ -5116,7 +5116,7 @@ document.getElementById('eaClearClouds').addEventListener('click', () => {
 // #5 (2026-09-18)：史诗巨构山（全部 epic* 63 件）后移 4 倍距离 + 放大 2 倍（配合 40km 扩图）——
 //     绕质心 (-236.1,-4137) 等比 2× 再平移：x'=2x+236.1, z'=2z-4914, scale×2, alt×2；
 //     前缘 -3026→-10965（距前排大教堂 4×），远缘 -18706 在 40km 图内
-const LAYOUT_PATCH = 5;
+const LAYOUT_PATCH = 6;
 (function applyLayoutPatch(){
   try{
     const cur = +localStorage.getItem('wh40k_patch') || 0;
@@ -5157,6 +5157,19 @@ const LAYOUT_PATCH = 5;
         }
       }
       if(n5) localStorage.setItem(lk5, JSON.stringify(list5));
+    }
+    if(cur < 6){   // 用户反馈 4 倍太靠后：等比 0.75 收拢到 3 倍距离（前缘 10586m→7940m），体量不变
+      const lk6 = 'wh40k_layout_hive';
+      const list6 = JSON.parse(localStorage.getItem(lk6) || '[]');
+      let n6 = 0;
+      for(const o of list6){
+        if(String(o.key || '').indexOf('epic') === 0 && o.z < -9000){   // 只动已在远带的巨构山成员
+          o.x = +(0.75 * o.x - 59.0).toFixed(1);
+          o.z = +(0.75 * o.z - 94.75).toFixed(1);
+          n6++;
+        }
+      }
+      if(n6) localStorage.setItem(lk6, JSON.stringify(list6));
     }
     localStorage.setItem('wh40k_patch', String(LAYOUT_PATCH));
   }catch(e){}
