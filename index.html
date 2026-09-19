@@ -4381,15 +4381,25 @@ function doUndo(){
   editorSave(); editorSyncUI();
   toast('已撤销：' + a.label);
 }
+let editorPlacing = false;
 function editorRestore(){
-  if(!current || editorRestored[currentId]) return;
+  if(!current || editorRestored[currentId] || editorPlacing) return;
   let list = [];
   try{ list = JSON.parse(localStorage.getItem(EDIT_LS())) || []; }catch(err){}
   if(!list.length){ editorRestored[currentId] = true; return; }
-  for(const it of list){ if(!editorProto(it.key)) return; }   // 原型未就绪则等下一轮
-  for(const it of list) editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
-  editorRestored[currentId] = true;
-  toast('造景布局已恢复（' + list.length + ' 件）');
+  const pend = [...new Set(list.filter(it => !editorProto(it.key)).map(it => it.key))];
+  if(pend.length){   // 原型未就绪则等下一轮——大布景首载资产多，必须让用户看到还活着
+    toast('布景资产加载中，还差 ' + pend.length + ' 种（' + pend.slice(0, 4).join(' / ') + (pend.length > 4 ? ' …' : '') + '）');
+    return;
+  }
+  editorPlacing = true;
+  toast('资产就绪，正在摆放 ' + list.length + ' 件布景——页面会卡顿一两分钟，请勿刷新…');
+  setTimeout(() => {   // 先让提示画出来再进同步摆放长任务
+    for(const it of list) editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
+    editorRestored[currentId] = true;
+    editorPlacing = false;
+    toast('造景布局已恢复（' + list.length + ' 件）');
+  }, 80);
 }
 
 /* —— 系统建筑（巨构/城墙排）纳入造景编辑：点选/移动/旋转/缩放 + 独立存档 —— */
