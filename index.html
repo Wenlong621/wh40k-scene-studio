@@ -4312,7 +4312,7 @@ function editorApply(it){
 }
 function editorSave(){
   try{
-    localStorage.setItem(EDIT_LS(), JSON.stringify(placedItems
+    let out = placedItems
       .filter(it => it.scene === currentId)
       .map(it => {
         const o = {key:it.key, x:+it.x.toFixed(1), z:+it.z.toFixed(1), rotY:+it.rotY.toFixed(3), scale:+it.scale.toFixed(3)};
@@ -4320,7 +4320,10 @@ function editorSave(){
         if(it.alt != null) o.alt = +it.alt.toFixed(1);
         if(it.tilt) o.tilt = +it.tilt.toFixed(3);
         return o;
-      })));
+      });
+    const q = editorRestoreQ[currentId];
+    if(q && q.idx < q.list.length) out = out.concat(q.list.slice(q.idx));   // 增量恢复未完成时编辑：把还没摆出来的尾巴一起存回，防止存档被截断
+    localStorage.setItem(EDIT_LS(), JSON.stringify(out));
   }catch(err){}
 }
 function editorPlace(key, x, z, rotY=0, scale=1, silent=false, extra){
@@ -4381,25 +4384,34 @@ function doUndo(){
   editorSave(); editorSyncUI();
   toast('已撤销：' + a.label);
 }
-let editorPlacing = false;
+const editorRestoreQ = {};   // 每场景增量恢复游标 {list, idx}：资产到一批摆一批，城市逐步长出来
 function editorRestore(){
-  if(!current || editorRestored[currentId] || editorPlacing) return;
-  let list = [];
-  try{ list = JSON.parse(localStorage.getItem(EDIT_LS())) || []; }catch(err){}
-  if(!list.length){ editorRestored[currentId] = true; return; }
-  const pend = [...new Set(list.filter(it => !editorProto(it.key)).map(it => it.key))];
-  if(pend.length){   // 原型未就绪则等下一轮——大布景首载资产多，必须让用户看到还活着
-    toast('布景资产加载中，还差 ' + pend.length + ' 种（' + pend.slice(0, 4).join(' / ') + (pend.length > 4 ? ' …' : '') + '）');
-    return;
+  if(!current || editorRestored[currentId]) return;
+  let q = editorRestoreQ[currentId];
+  if(!q){
+    let list = [];
+    try{ list = JSON.parse(localStorage.getItem(EDIT_LS())) || []; }catch(err){}
+    if(!list.length){ editorRestored[currentId] = true; return; }
+    q = editorRestoreQ[currentId] = {list, idx: 0};
   }
-  editorPlacing = true;
-  toast('资产就绪，正在摆放 ' + list.length + ' 件布景——页面会卡顿一两分钟，请勿刷新…');
-  setTimeout(() => {   // 先让提示画出来再进同步摆放长任务
-    for(const it of list) editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
+  // 严格按存档顺序推进（角色吸附堆叠依赖先摆底座），每轮限量让页面能喘气重绘
+  const CHUNK = 250;
+  let n = 0;
+  while(q.idx < q.list.length && n < CHUNK){
+    const it = q.list[q.idx];
+    if(!editorProto(it.key)) break;   // 该件资产未下载完：停在这等它，已就绪的先展示
+    editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
+    q.idx++; n++;
+  }
+  if(q.idx >= q.list.length){
+    delete editorRestoreQ[currentId];
     editorRestored[currentId] = true;
-    editorPlacing = false;
-    toast('造景布局已恢复（' + list.length + ' 件）');
-  }, 80);
+    toast('造景布局已恢复（' + q.list.length + ' 件）');
+  } else if(n){
+    toast('布景恢复中 ' + q.idx + ' / ' + q.list.length + ' 件…');
+  } else {
+    toast('布景恢复中 ' + q.idx + ' / ' + q.list.length + ' 件——等待资产「' + q.list[q.idx].key + '」下载…');
+  }
 }
 
 /* —— 系统建筑（巨构/城墙排）纳入造景编辑：点选/移动/旋转/缩放 + 独立存档 —— */
