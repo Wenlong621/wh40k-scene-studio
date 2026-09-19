@@ -413,7 +413,7 @@ renderer.shadowMap.autoUpdate = false;
 let shadowDirty = true, shadowFrameNo = 0;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 20000);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 48000);   // 2026-09-18 扩图 40km：远面 20000→48000（罩住 22km 穹顶与远角）
 
 const yawObj = new THREE.Object3D();
 const pitchObj = new THREE.Object3D();
@@ -1236,7 +1236,7 @@ function injectAerialFog(m){
   float fDist = max(length(fdv), 0.001);
   vec3 fRd = fdv / fDist;
   float fB = 0.0004;                                    // 高度衰减（~2500m 一个 e 折；2026-09-15 用户要求全高度覆盖，旧 0.0055≈180m 高塔全露）
-  float fA = 0.00030 * uMegaFog * uMegaFog;             // 平方曲线：1.0 标准、2.0=真·浓雾天（近中景空气可见）
+  float fA = 0.00012 * uMegaFog * uMegaFog;             // 平方曲线：1.0 标准、2.0=浓雾（2026-09-18 扩图后基准 0.00030→0.00012，14km 远山保留剪影不被吞没）
   float fRy = (abs(fRd.y) < 0.001) ? 0.001 : fRd.y;
   float fAmt = (fA / fB) * exp(-cameraPosition.y * fB) * (1.0 - exp(-fDist * fRy * fB)) / fRy;
   float fF = clamp(1.0 - exp(-max(fAmt, 0.0)), 0.0, 1.0);
@@ -1256,7 +1256,7 @@ function spriteFogAmt(sp, baseCol){
   sp.getWorldPosition(_fogDv).sub(_fogCam);
   const d = Math.max(_fogDv.length(), 0.001);
   let ry = _fogDv.y / d; if(Math.abs(ry) < 0.001) ry = 0.001;
-  const fB = 0.0004, fA = 0.0003 * fogMulCur * fogMulCur;   // fB 与注入器同步（全高度覆盖）
+  const fB = 0.0004, fA = 0.00012 * fogMulCur * fogMulCur;   // fB/fA 与注入器同步（全高度覆盖 + 扩图调透）
   const amt = (fA / fB) * Math.exp(-_fogCam.y * fB) * (1 - Math.exp(-d * ry * fB)) / ry;
   const fF = Math.min(1 - Math.exp(-Math.max(amt, 0)), 1);
   const fSun = Math.pow(Math.max((_fogDv.x*0.327 + _fogDv.y*0.643 + _fogDv.z*0.693) / d, 0), 7);
@@ -1417,7 +1417,7 @@ function buildHive(){
   const g = new THREE.Group();
   // 手绘黄昏烟霾天幕：暗烟云 + 受光云 + 地平亮带 + 残阳光斑
   // 穹顶 8000（2026-07-23 随地图扩到 16000 同步放大）：完整包住 1000m 巨构与整条城墙排
-  const hiveDome = paintedSky(8000, (ctx, W, H) => {
+  const hiveDome = paintedSky(22000, (ctx, W, H) => {   // 2026-09-18 扩图：穹顶 8000→22000 包住 40km 地面
     // 基础渐变：冷调蓝灰阴天（2026-07-26 SM2 参考图重制；亮斑只允许出现在日光扇区）
     skyGrad(ctx, W, H, [[0,'#20262a'],[0.30,'#3a454b'],[0.44,'#4d5a61'],
       [0.50,'#5d6c73'],[0.58,'#57666d'],[0.72,'#4b585f'],[1,'#404b52']]);
@@ -1467,9 +1467,9 @@ function buildHive(){
   const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
     map:glowTex, color:0xeef6f8, blending:THREE.AdditiveBlending,
     depthWrite:false, transparent:true, opacity:0.40, fog:false}));
-  // 贴到穹顶皮附近（r≈7400，穹顶 8000）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
-  // 仰角 40°（2026-07-24）：位置 = (0.427,0.905)水平向 × 7400cos40° + y=7400sin40°
-  sunGlow.scale.set(3600, 3600, 1); sunGlow.position.set(2420, 4757, 5130); g.add(sunGlow);
+  // 贴到穹顶皮附近（r≈20350，穹顶 22000）：远距=相机移动几乎无视差，与天幕画的日盘始终重合；
+  // 仰角 40°：位置 = (0.427,0.905)水平向 × 20350cos40° + y=20350sin40°（2026-09-18 随扩图 ×2.75）
+  sunGlow.scale.set(9900, 9900, 1); sunGlow.position.set(6657, 13081, 14108); g.add(sunGlow);
 
   // 起伏地形：出生点与柱廊带压平，越远丘壑越大；漫游时镜头贴地起伏
   const terrain = (x, z) => {
@@ -1497,7 +1497,7 @@ function buildHive(){
     return h;
   };
   // 大地面：8000×8000（2026-07-14 扩图：城墙 5200 排两端各留 ~1400m 余量，边界不再切墙头）
-  const G_SIZE = 16000, G_SEG = 560;   // 2026-07-23 扩图×2（8000→16000）；网格 380→560 控制顶点量，格距 21→28.6m 远丘略粗（雾内不可辨）
+  const G_SIZE = 40000, G_SEG = 900;   // 2026-09-18 扩图 40km（史诗巨构山后移 4 倍需北扩至 z≈-19km）；格距 44.4m 远丘更粗（雾内不可辨）；旧 16000/560
   const gGeo = new THREE.PlaneGeometry(G_SIZE, G_SIZE, G_SEG, G_SEG);
   gGeo.rotateX(-Math.PI/2);
   const gPos = gGeo.attributes.position;
@@ -5091,7 +5091,10 @@ document.getElementById('eaClearClouds').addEventListener('click', () => {
 // #3 (2026-09-18，已撤销)：误把系统巨构当"巨构山"搬移——用户指的是史诗巨构群
 // #4 (2026-09-18)：撤销 #3——巨构若在补丁位 (-1239,-869) 则还原回 (-711,-501.5,s0.73)；
 //     未应用过 #3 的浏览器（#3 逻辑已删除）此步自然空转
-const LAYOUT_PATCH = 4;
+// #5 (2026-09-18)：史诗巨构山（全部 epic* 63 件）后移 4 倍距离 + 放大 2 倍（配合 40km 扩图）——
+//     绕质心 (-236.1,-4137) 等比 2× 再平移：x'=2x+236.1, z'=2z-4914, scale×2, alt×2；
+//     前缘 -3026→-10965（距前排大教堂 4×），远缘 -18706 在 40km 图内
+const LAYOUT_PATCH = 5;
 (function applyLayoutPatch(){
   try{
     const cur = +localStorage.getItem('wh40k_patch') || 0;
@@ -5117,6 +5120,21 @@ const LAYOUT_PATCH = 4;
         sys.mega.x = -711; sys.mega.z = -501.5; sys.mega.s = 0.73;
         localStorage.setItem(sk, JSON.stringify(sys));
       }
+    }
+    if(cur < 5){
+      const lk5 = 'wh40k_layout_hive';
+      const list5 = JSON.parse(localStorage.getItem(lk5) || '[]');
+      let n5 = 0;
+      for(const o of list5){
+        if(String(o.key || '').indexOf('epic') === 0 && o.z < -2900){   // 只动巨构山成员（老坐标带）
+          o.x = +(2 * o.x + 236.1).toFixed(1);
+          o.z = +(2 * o.z - 4914).toFixed(1);
+          o.scale = +((o.scale || 1) * 2).toFixed(2);
+          if(o.alt != null) o.alt = +(o.alt * 2).toFixed(1);
+          n5++;
+        }
+      }
+      if(n5) localStorage.setItem(lk5, JSON.stringify(list5));
     }
     localStorage.setItem('wh40k_patch', String(LAYOUT_PATCH));
   }catch(e){}
