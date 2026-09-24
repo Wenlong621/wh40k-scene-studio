@@ -312,6 +312,9 @@
         <button data-ea="cfort">🏰 城堡要塞</button>
         <button data-ea="ifort2">🏭 工业要塞2</button>
         <button data-ea="gruin2">🗼 圣白塔楼</button>
+        <button data-ea="mbase">🪖 军事基地</button>
+        <button data-ea="sbase">🛸 科幻基地</button>
+        <button data-ea="ffort4">🏯 奇幻要塞4</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -371,6 +374,7 @@
       <div class="aspect-btns" style="margin-top:4px;">
         <button data-ea="mtn">⛰ 岩山</button>
         <button data-ea="mtnsnow">🏔 雪山</button>
+        <button data-ea="fcmtn">🏰 城堡山</button>
       </div>
       <div class="row"><label>缩放</label><input type="range" id="eaScale" min="5" max="500" value="100"><span class="val" id="eaScaleVal">1.00</span></div>
       <div class="row"><label>朝向</label><input type="range" id="eaRot" min="0" max="360" value="0"><span class="val" id="eaRotVal">0</span></div>
@@ -2804,7 +2808,7 @@ function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
           if(o.isSkinnedMesh) o.frustumCulled = false;   // 蒙皮包围球不准，防剔除闪烁
           const ms = Array.isArray(o.material) ? o.material : [o.material];
           ms.forEach(mm => { if(mm){ injectAerialFog(mm); mm.envMapIntensity = 0.15;
-            if(key === 'mtn' || key === 'mtnsnow'){   // 山体：雪/岩反照率过高，7.0 日光+辉光下整山白炽爆掉，压暗回可读（0.50 定档：向阳雪坡保留一点高光溢出=阳光雪原眩光，远景入雾后自然消解）
+            if(key === 'mtn' || key === 'mtnsnow' || key === 'fcmtn'){   // 山体：雪/岩反照率过高，7.0 日光+辉光下整山白炽爆掉，压暗回可读（0.50 定档：向阳雪坡保留一点高光溢出=阳光雪原眩光，远景入雾后自然消解）
               if(mm.color) mm.color.multiplyScalar(0.50);
               mm.roughness = 1; mm.metalness = 0; mm.envMapIntensity = 0.06;
             }
@@ -2962,6 +2966,10 @@ loadEditorProp('ifort2',   'assets/ifort2.glb',                    90, false, '�
 loadEditorProp('gruin2',   'assets/gruin2.glb',                    65, false, '圣白塔楼'); // 2026-09-22 入库：白石圣塔楼群（红幡+碎石基座，文件名 gothic ruin 实为完整塔楼）按高 65m，精细档 375k 面
 loadEditorProp('mtn',      'assets/mtn.glb',                      600, true,  '岩山');     // 2026-09-22 入库「山体」新品类：宽扁岩山按占地宽 600m（高≈340m），byWidth 防扶正，精细档 376k 面
 loadEditorProp('mtnsnow',  'assets/mtnsnow.glb',                  600, true,  '雪山');     // 2026-09-22 入库「山体」：宽扁雪山按占地宽 600m（高≈300m），byWidth 防扶正，精细档 391k 面
+loadEditorProp('mbase',    'assets/mbase.glb',                    140, true,  '军事基地'); // 2026-09-23 入库：宽体军事基地群按占地宽 140m（高≈81m），精细档 388k 面
+loadEditorProp('sbase',    'assets/sbase.glb',                    140, true,  '科幻基地'); // 2026-09-23 入库：宽扁科幻基地按占地宽 140m（高≈67m），byWidth 防扶正，精细档 370k 面
+loadEditorProp('ffort4',   'assets/ffort4.glb',                    85, false, '奇幻要塞4'); // 2026-09-23 入库：立式要塞按高 85m（占地≈80×99m），精细档 386k 面
+loadEditorProp('fcmtn',    'assets/fcmtn.glb',                    300, false, '城堡山');   // 2026-09-23 入库「山体」：城堡山巨件按高 300m（占地≈275×303m），精细档 394k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -2993,7 +3001,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
   'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
   'vcastle', 'village', 'hvillage', 'mansion', 'sbridge', 'sbridge2', 'dtbalc',
-  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
