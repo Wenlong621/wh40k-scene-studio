@@ -318,6 +318,7 @@
         <button data-ea="gcastle">🏰 哥特城堡</button>
         <button data-ea="gcastle2">🏰 雪岩城堡</button>
         <button data-ea="gcath13">⛪ 雪峰教堂</button>
+        <button data-ea="fcastle5">🪜 雪坡圣阶</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -2977,6 +2978,7 @@ loadEditorProp('fcmtn',    'assets/fcmtn.glb',                    300, false, '�
 loadEditorProp('gcastle',  'assets/gcastle.glb',                  110, true,  '哥特城堡');  // 2026-09-23 入库：宽体哥特城堡按占地宽 110m（高≈88m），精细档 388k 面
 loadEditorProp('gcastle2', 'assets/gcastle2.glb',                 110, true,  '雪岩城堡'); // 2026-09-23 入库：雪岩底座红顶城堡按占地宽 110m（高≈82m），albedo 压暗名单，精细档 372k 面
 loadEditorProp('gcath13',  'assets/gcath13.glb',                   90, false, '雪峰教堂'); // 2026-09-23 入库：雪峰上的绿顶大教堂群按高 90m（占地≈88×86m），albedo 压暗名单，精细档 375k 面
+loadEditorProp('fcastle5', 'assets/fcastle5.glb',                  75, false, '雪坡圣阶'); // 2026-09-24 入库：雪坡阶梯圣道（红幡祠楼沿梯，背面切削宜靠山靠墙）按高 75m，精细档 384k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -3008,7 +3010,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
   'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
   'vcastle', 'village', 'hvillage', 'mansion', 'sbridge', 'sbridge2', 'dtbalc',
-  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13', 'fcastle5']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
