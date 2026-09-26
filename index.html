@@ -322,6 +322,10 @@
         <button data-ea="gcastle3">🏰 哥特城堡3</button>
         <button data-ea="gcastle4">🏰 哥特城堡4</button>
         <button data-ea="gcath14">⛪ 哥特教堂14</button>
+        <button data-ea="fcastle6">🏰 奇幻城堡6</button>
+        <button data-ea="fgcastle">🏰 奇幻哥特堡</button>
+        <button data-ea="fcastle7">🏰 奇幻城堡7</button>
+        <button data-ea="fcastle8">🏰 奇幻城堡8</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -375,6 +379,7 @@
       <div class="aspect-btns" style="margin-top:4px;">
         <button data-ea="cloudGray">☁ 灰云</button>
         <button data-ea="cloudWhite">🌥 白云</button>
+        <button id="eaCloudRing">⛅ 环山云带</button>
         <button id="eaClearClouds">🧹 清空全部云</button>
       </div>
       <div style="font-size:10px;letter-spacing:1px;color:var(--gold-dim);margin-top:10px;">山体</div>
@@ -2985,6 +2990,10 @@ loadEditorProp('fcastle5', 'assets/fcastle5.glb',                  75, false, '�
 loadEditorProp('gcastle3', 'assets/gcastle3.glb',                  80, false, '哥特城堡3'); // 2026-09-24 入库：立式哥特城堡按高 80m（占地≈63×80m），精细档 388k 面
 loadEditorProp('gcastle4', 'assets/gcastle4.glb',                  85, false, '哥特城堡4'); // 2026-09-24 入库：立式哥特城堡按高 85m（占地≈75×87m），精细档 387k 面
 loadEditorProp('gcath14',  'assets/gcath14.glb',                   90, false, '哥特教堂14'); // 2026-09-24 入库：立式大教堂按高 90m（占地≈76×94m），精细档 384k 面
+loadEditorProp('fcastle6', 'assets/fcastle6.glb',                  80, false, '奇幻城堡6'); // 2026-09-26 入库：立式城堡按高 80m（占地≈60×63m），精细档 387k 面
+loadEditorProp('fgcastle', 'assets/fgcastle.glb',                  85, false, '奇幻哥特堡'); // 2026-09-26 入库：细高塔堡按高 85m（占地≈49×53m），精细档 392k 面
+loadEditorProp('fcastle7', 'assets/fcastle7.glb',                  80, false, '奇幻城堡7'); // 2026-09-26 入库：立式城堡按高 80m（占地≈60×64m），精细档 390k 面
+loadEditorProp('fcastle8', 'assets/fcastle8.glb',                  80, false, '奇幻城堡8'); // 2026-09-26 入库：立式城堡按高 80m（占地≈54×59m），精细档 395k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -3016,7 +3025,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
   'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
   'vcastle', 'village', 'hvillage', 'mansion', 'sbridge', 'sbridge2', 'dtbalc',
-  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13', 'fcastle5', 'gcastle3', 'gcastle4', 'gcath14']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13', 'fcastle5', 'gcastle3', 'gcastle4', 'gcath14', 'fcastle6', 'fgcastle', 'fcastle7', 'fcastle8']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
@@ -5150,6 +5159,29 @@ document.getElementById('eaClearPavs').addEventListener('click', () => {
   rebuildPavFlats();       // 石板路清掉后地形恢复起伏
   editorSave(); editorSyncUI();
   toast(n ? '已清空 ' + n + ' 块地面贴皮' : '当前场景没有已放置的贴皮');
+});
+// ⛅ 环山云带：对选中的山/巨构，在其 35%-65% 高度带自动环绕一圈云（2026-09-26 用户要"云笼罩巢都显伟岸"）
+document.getElementById('eaCloudRing').addEventListener('click', () => {
+  if(!editSelected){ toast('先在造景模式选中一座山/建筑，再点环山云带'); return; }
+  const box = new THREE.Box3().setFromObject(editSelected.root);
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2;
+  const rx = Math.max((box.max.x - box.min.x) / 2, 60), rz = Math.max((box.max.z - box.min.z) / 2, 60);
+  const h = Math.max(box.max.y - box.min.y, 60);
+  const cScale = Math.min(5, Math.max(1, h / 220));   // 云团随山体高度放大（体积云上限 5x）
+  const n = 12, adds = [];
+  for(let i = 0; i < n; i++){
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+    const rr = 1.02 + Math.random() * 0.45;            // 半悬山腰、半探出轮廓
+    const x = cx + Math.cos(a) * rx * rr;
+    const z = cz + Math.sin(a) * rz * rr;
+    const alt = box.min.y + h * (0.35 + Math.random() * 0.3);
+    const key = Math.random() < 0.55 ? 'cloudWhite' : 'cloudGray';
+    const it = editorPlace(key, +x.toFixed(1), +z.toFixed(1), Math.random() * Math.PI * 2,
+      +(cScale * (0.75 + Math.random() * 0.5)).toFixed(2), true, {alt: +alt.toFixed(0)});
+    if(it) adds.push(it);
+  }
+  if(adds.length){ editorSave(); pushUndo({label: '环山云带（' + adds.length + ' 朵）', adds}); }
+  toast(adds.length ? '已环绕生成 ' + adds.length + ' 朵云（↩ 可撤销；可再点叠加更浓）' : '云未能生成');
 });
 document.getElementById('eaClearClouds').addEventListener('click', () => {
   let n = 0; const removed = [];
