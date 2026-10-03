@@ -332,6 +332,7 @@
         <button data-ea="mbridge">🌉 中世纪桥</button>
         <button data-ea="mbridge2">🌉 中世纪拱桥</button>
         <button data-ea="fcastle11">🏰 奇幻城堡11</button>
+        <button data-ea="fcastle12">🏰 奇幻城堡12</button>
         <button data-ea="astat">🗿 甲胄雕像</button>
         <button data-ea="fstat">🗿 奇幻雕像</button>
         <button id="eaHiveCity">🏙 蜂巢布景</button>
@@ -2810,7 +2811,7 @@ loadFortressWall();
 /* 造景资产库：通用装载器——Z-up 扶正 → 按高(或扁平件按宽)归一化 → 居中贴地 →
    统一高度雾 + 单一日光 envMap 0.15 + 投影。仅供造景模式放置，不默认入场景 */
 const editorProtos = {};
-const ALBEDO_DAMP_KEYS = new Set(['mtn', 'mtnsnow', 'fcmtn', 'gcastle2', 'gcath13', 'garch2', 'fcastle11']);   // 雪/白岩高反照率件：入库时 albedo×0.50+全哑光（新自然/白石件白炽就加进来）
+const ALBEDO_DAMP_KEYS = new Set(['mtn', 'mtnsnow', 'fcmtn', 'gcastle2', 'gcath13', 'garch2', 'fcastle11', 'fcastle12']);   // 雪/白岩高反照率件：入库时 albedo×0.50+全哑光（新自然/白石件白炽就加进来）
 function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
   // 加载自愈：reload 打断在途 GLB 后 GLTFLoader 既不成功也不报错（卡死），20s 未就绪自动重试（最多 2 次）
   if((_try || 0) < 2) setTimeout(() => {
@@ -3008,6 +3009,7 @@ loadEditorProp('mcannon',  'assets/mcannon.glb',                   35, true,  '�
 loadEditorProp('mbridge',  'assets/mbridge.glb',                  110, true,  '中世纪桥');   // 2026-09-29 入库：长桥按占地长 110m（高≈61m），精细档 386k 面
 loadEditorProp('mbridge2', 'assets/mbridge2.glb',                 120, true,  '中世纪拱桥'); // 2026-09-29 入库：拱桥按占地长 120m（高≈75m），精细档 382k 面
 loadEditorProp('fcastle11','assets/fcastle11.glb',                 80, false, '奇幻城堡11'); // 2026-10-03 入库：立式城堡按高 80m（占地≈51×56m），精细档 392k 面
+loadEditorProp('fcastle12','assets/fcastle12.glb',                 80, false, '奇幻城堡12'); // 2026-10-03 入库：立式城堡按高 80m（占地≈54×64m），精细档 395k 面
 loadEditorProp('garch',    'assets/gothic_architecture.glb', 60, false, '哥特殿宇');  // 竖高型殿宇建筑群
 loadEditorProp('gbridge2', 'assets/gothic_bridge2.glb',    110, true,  '石拱长桥');  // 长桥变体按占地长
 loadEditorProp('vpanel',   'assets/metal_vault_panel.glb',  20, true,  '拱纹铁板', true);  // 3D 地面板（强制放平，带真实厚度）
@@ -3039,7 +3041,7 @@ const BUILDING_KEYS = new Set(['castle', 'fortress', 'throne', 'tile', 'gcath', 
   'epic1', 'epic2', 'epic3', 'epic4', 'gbridge3',
   'gtower2', 'gcath10', 'gcath11', 'ncath', 'astat', 'fstat', 'gcath12', 'gbld2',
   'vcastle', 'village', 'hvillage', 'mansion', 'sbridge', 'sbridge2', 'dtbalc',
-  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13', 'fcastle5', 'gcastle3', 'gcastle4', 'gcath14', 'fcastle6', 'fgcastle', 'fcastle7', 'fcastle8', 'fcastle9', 'fcastle10', 'mcannon', 'mbridge', 'mbridge2', 'garch2', 'fcastle11']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
+  'town', 'dtface2', 'town2', 'farch', 'mining', 'sfort2', 'dtank', 'fcastle', 'fcastle2', 'ffort', 'ffort2', 'ctower', 'rfort', 'ffort3', 'ufort', 'fcastle3', 'rcastle', 'fcastle4', 'cfort', 'ifort2', 'gruin2', 'mtn', 'mtnsnow', 'mbase', 'sbase', 'ffort4', 'fcmtn', 'gcastle', 'gcastle2', 'gcath13', 'fcastle5', 'gcastle3', 'gcastle4', 'gcath14', 'fcastle6', 'fgcastle', 'fcastle7', 'fcastle8', 'fcastle9', 'fcastle10', 'mcannon', 'mbridge', 'mbridge2', 'garch2', 'fcastle11', 'fcastle12']);   // 「建筑物细节」板块与后续入库件+「山体」品类：与建筑物同一套操作属性（缩放上限/悬浮滑杆/贴面碰撞）
 const FRIEND_KEYS = new Set(['msold', 'mturret']);   // 我方兵种（星界军）：不参与敌方阵型按钮
 const canHover = k => ENEMY_KEYS.has(k) || BUILDING_KEYS.has(k) || FRIEND_KEYS.has(k);   // 高度滑杆生效的键
 // 缩放上限按类型动态切换（2026-07-23 用户要求）：建筑可放大 10×，铁板（滑杆=拼贴数）/角色/敌人维持 5×
