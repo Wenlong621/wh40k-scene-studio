@@ -453,7 +453,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // 阴影按需重绘：默认 autoUpdate 会每帧把全场景（含所有放置的百万面 GLB）画进 8192² 阴影贴图，
 // 是摆件多了之后移动视角卡顿的主因。改为 shadowDirty 调度（见 animate 尾部与 updateMove 阴影跟随块）
 renderer.shadowMap.autoUpdate = false;
-let shadowDirty = true, shadowFrameNo = 0;
+let shadowDirty = true, shadowFrameNo = 0, shadowLastMs = 0;
+let cullIdx = 0;   // 远景角量剔除的滚动扫描游标（见 animate 尾部）
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 48000);   // 2026-09-18 扩图 40km：远面 20000→48000（罩住 22km 穹顶与远角）
@@ -2862,6 +2863,7 @@ function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
       m.position.x -= c.x; m.position.z -= c.z; m.position.y -= box.min.y;  // 居中 + 脚底 y=0
       const grp = new THREE.Group(); grp.add(m);
       grp.userData.thick = box.max.y - box.min.y;           // 归一化后总高：铁板下沉量=thick-0.45
+      grp.userData.nomR = Math.max(box.max.x - box.min.x, box.max.y - box.min.y, box.max.z - box.min.z) / 2;   // 标称包围半径（远景角量剔除用）
       // 落脚点提取（低带 8% 高度内几何的 XZ 包围盒角+中心）：长跨件（桥）只有两端落地，
       // 吸附堆叠按落脚点探支撑——避免"桥中央下方的石台把整座桥顶悬空"
       m.updateWorldMatrix(true, true);
@@ -4213,7 +4215,7 @@ function updateMove(dt){
     // 阴影盒收得太小导致远处大军没影子（用户抓包）。用绝对相机高度兜底
     const camH = Math.max(eyeHeight, yawObj.position.y);
     const half = Math.min(2900, Math.max(160, 160 + camH*4));
-    if(Math.abs(half - hiveSunHalf) > hiveSunHalf*0.02){
+    if(Math.abs(half - hiveSunHalf) > hiveSunHalf*0.06){   // 迟滞 2%→6%（2026-10-05）：Q/E 升降时连续触发整图阴影重渲是卡顿源之一
       hiveSunHalf = half;
       const c = hiveSun.shadow.camera;
       c.left = -half; c.right = half; c.top = half; c.bottom = -half;
@@ -4397,6 +4399,30 @@ function editorApply(it){
   }
   collidersScene = null;   // 变换后碰撞盒/贴面集重建
   shadowDirty = true;      // 摆件变换后阴影贴图重绘
+  it.cullR = undefined;    // 缩放可能变了：角量剔除半径下轮扫描时重算
+}
+// —— 远景角量剔除（2026-10-05 摆件多了移动卡顿）：直径视角 < ~5px 的放置件隐藏 ——
+// 主渲染与阴影双省；迟滞双阈值（440R 隐 / 380R 现）防边界闪烁。
+// 只动 root.visible：碰撞/存档/选中/导出不受影响；贴皮(shape)、选中件、移动中件豁免。
+function cullSweep(budget){
+  const cn = placedItems.length;
+  if(!cn || !current) return;
+  const cpx = yawObj.position.x, cpy = yawObj.position.y, cpz = yawObj.position.z;
+  const lim = Math.min(cn, budget || 400);
+  for(let k = 0; k < lim; k++){
+    const it = placedItems[(cullIdx + k) % cn];
+    if(it.scene !== currentId || it.shape || it === editSelected || (editGhost && editGhost.item === it)) continue;
+    if(it.cullR === undefined){
+      const p = editorProtos[it.key];
+      it.cullR = ((p && p.userData && p.userData.nomR) || 60) * (it.scale || 1);
+    }
+    const R = it.cullR;
+    const dx = it.x - cpx, dz = it.z - cpz, dy = (it.root.position.y + R) - cpy;
+    const d2 = dx*dx + dy*dy + dz*dz;
+    if(it.root.visible){ if(d2 > 193600*R*R) it.root.visible = false; }       // d > 440R 隐藏
+    else if(d2 < 144400*R*R) it.root.visible = true;                          // d < 380R 恢复
+  }
+  cullIdx = (cullIdx + lim) % cn;
 }
 function editorSave(){
   try{
@@ -5406,6 +5432,9 @@ window.__dbg = {keys, rig:yawObj, player, step:(dt)=>updateMove(dt), gl:renderer
   selectItem:(i)=>{ editSelected = placedItems.filter(it=>it.scene===currentId)[i] || null; editorSyncUI(); return editSelected ? editSelected.key : null; },   // QC：按序号选中
   ghost:()=>editGhost ? {key: editGhost.key, moveMode: !!editGhost.item, scale: +editGhost.root.scale.x.toFixed(2), rotY: +editGhost.root.rotation.y.toFixed(3), alt: editGhost.root.userData && editGhost.root.userData.alt != null ? editGhost.root.userData.alt : null} : null,
   protos:()=>Object.keys(editorProtos),
+  cullStat:()=>placedItems.reduce((a,it)=>{ if(it.scene===currentId){ a.total++; if(!it.root.visible) a.hidden++; } return a; }, {total:0, hidden:0}),   // 远景剔除统计（QC）
+  cull:(n)=>{ cullSweep(n || placedItems.length); return 'swept'; },   // 手动驱动一轮剔除（QC：rAF 挂起时用）
+  frameMs:()=>new Promise(res=>{ const t0=performance.now(); let n=0; const f=()=>{ n++; if(performance.now()-t0>2000) res(+((performance.now()-t0)/n).toFixed(1)); else requestAnimationFrame(f); }; requestAnimationFrame(f); }),   // 2 秒平均帧耗时（QC）
   boom:()=>+camera.position.z.toFixed(2),
   camPos:()=>{ const v=yawObj.position.clone(); camera.getWorldPosition(v); return {x:+v.x.toFixed(2), y:+v.y.toFixed(2), z:+v.z.toFixed(2)}; },
   // 远程QC：固定尺寸渲染一帧并返回 JPEG dataURL（面板隐藏/画布0尺寸时也可用）
@@ -5928,13 +5957,21 @@ function animate(){
     ps.points.geometry.attributes.position.needsUpdate = true;
   }
 
-  // 阴影贴图按需重绘调度：光照框动了/拖拽幽灵中/角色可见（行走=全帧率——姿态变化快，
-  // 30Hz 滞后自阴影会在背光掠射区闪烁；静止仅呼吸=30Hz 无感）/每 60 帧心跳兜底（迟到 GLB、删件）
+  cullSweep(400);   // 远景角量剔除：滚动扫描每帧 ≤400 件（全量 ~12 帧一轮）
+  // 阴影贴图按需重绘调度（2026-10-05 重排）：一次重绘=全场景画进 8192² 贴图，必须省着用。
+  // · 低机位（阴影框 <700m，框内件少）：行走全帧率跟手、静止呼吸 3Hz——代价小体验好
+  // · 高空全景（框=全城，重绘一次≈画全城两遍）：只走每 60 帧心跳，角色在画面里只有几像素不值得跟
+  // · 脏标记/拖拽幽灵：节流到 ≥280ms/150ms 一次（Q/E 连续升降、连续摆件不再每帧全城重渲）
   shadowFrameNo++;
   const charShadow = viewMode !== 'free' && (player.loaded || player.fpsLoaded);
-  if(shadowDirty || editGhost || (charShadow && (player.moving || shadowFrameNo % 2 === 0)) || shadowFrameNo % 60 === 0){
+  const smallBox = currentId !== 'hive' || hiveSunHalf < 700;
+  const charDue = charShadow && smallBox && (player.moving || shadowFrameNo % 20 === 0);
+  const nowMs = performance.now();
+  const dirtyDue = (shadowDirty || editGhost) && (nowMs - shadowLastMs > (editGhost ? 150 : 280));
+  if(dirtyDue || charDue || shadowFrameNo % 60 === 0){
     renderer.shadowMap.needsUpdate = true;
-    shadowDirty = false;
+    shadowLastMs = nowMs;
+    if(!editGhost) shadowDirty = false;
   }
   composer.render();
   if(recCopy) recCopy();   // 录像中：把画幅中心裁切区拷进录制画布（本帧刚渲染完，缓冲仍有效）
