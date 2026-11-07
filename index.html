@@ -2817,6 +2817,7 @@ const ALBEDO_DAMP_KEYS = new Set(['mtn', 'mtnsnow', 'fcmtn', 'gcastle2', 'gcath1
 // 就卡死布景恢复（用户"老是加载不出来"）。loadEditorProp 现在只注册规格；editorProto()
 // 查不到原型时自动触发 ensureProp 下载——恢复队列/面板按钮/批量摆设所有调用点零改动全覆盖。
 const PROP_SPECS = {}, PROP_LOADING = {}, PROP_FAILED = {};
+const IS_LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);   // 本地模式：低模 LOD 仅在此启用
 function loadEditorProp(key, url, size, byWidth, label, layFlat){
   PROP_SPECS[key] = {url, size, byWidth, label, layFlat};
 }
@@ -2908,17 +2909,51 @@ function ensureProp(key, _try){
         [fcx, fb.min.z], [fcx, fb.max.z],
         [fb.min.x, fcz], [fb.max.x, fcz]
       ] : [[0, 0]];
-      editorProtos[key] = grp;
-      buildPropBVH(grp);   // 贴面碰撞/吸附用（BVH 库未就绪则由其加载回调补建）
-      const st = document.getElementById('marineStatus');
-      if(st && st.textContent.indexOf(label) < 0) st.textContent += ' · ' + label + '✓';
+      // —— 内嵌 LOD 低模（2026-11-07 性能大招）：assets/lo/ 同名低模（gltfpack -si 0.03 -sa，~1-3 万面）
+      // 挂为 grp 第二子件（userData.isLo，初始隐藏），cullSweep 按角尺寸切换精/低模可见性。
+      // 低模与精模同源坐标系：套用精模归一化变换即严格对齐；材质直接共享精模材质（不占额外显存、
+      // 雾/压暗注入自动继承）。低模缺失/超时则不带 LOD 照常注册（向后兼容）。
+      const finishReg = () => {
+        if(editorProtos[key]) return;
+        editorProtos[key] = grp;
+        buildPropBVH(grp);   // 贴面碰撞/吸附用（BVH 内部跳过 isLo 网格）
+        const st = document.getElementById('marineStatus');
+        if(st && st.textContent.indexOf(label) < 0) st.textContent += ' · ' + label + '✓';
+      };
+      if(!IS_LOCAL){ finishReg(); return; }   // 低模仅本地模式启用（云端不多下一字节；本地硬盘直读零成本）
+      const loUrl = spec.url.split('?')[0].replace(/^assets\//, 'assets/lo/');
+      const loTimer = setTimeout(finishReg, 12000);   // 低模 12s 未到：先注册（无 LOD）
+      gltfLoader.load(loUrl, (g2) => {
+        clearTimeout(loTimer);
+        if(!editorProtos[key]){
+          const lo = g2.scene;
+          lo.position.copy(m.position); lo.quaternion.copy(m.quaternion); lo.scale.copy(m.scale);
+          const hiMats = {}; let hiFirst = null;
+          m.traverse(o => { if(o.isMesh){ const ms2 = Array.isArray(o.material) ? o.material : [o.material];
+            ms2.forEach(mm => { if(mm){ if(!hiFirst) hiFirst = mm; if(mm.name) hiMats[mm.name] = mm; } }); } });
+          lo.traverse(o => {
+            if(o.isMesh){
+              o.userData.isLo = true;
+              o.castShadow = !PANEL_KEYS.has(key); o.receiveShadow = true;
+              const mn = Array.isArray(o.material) ? (o.material[0] && o.material[0].name) : (o.material && o.material.name);
+              o.material = hiMats[mn] || hiFirst;   // 共享精模材质
+            }
+          });
+          const loHolder = new THREE.Group();
+          loHolder.userData.isLo = true;
+          loHolder.visible = false;
+          loHolder.add(lo);
+          grp.add(loHolder);
+        }
+        finishReg();
+      }, undefined, () => { clearTimeout(loTimer); finishReg(); });
     },
     undefined,
     (err) => { clearTimeout(watchdog); PROP_LOADING[key] = false; console.error(key + ' GLB load error (try ' + t + ')', err); retry(); });
 }
 function buildPropBVH(grp){
   if(!bvhReady || !grp) return;
-  grp.traverse(o => { if(o.isMesh && o.geometry && !o.geometry.boundsTree) o.geometry.computeBoundsTree(); });
+  grp.traverse(o => { if(o.isMesh && o.geometry && !o.geometry.boundsTree && !o.userData.isLo) o.geometry.computeBoundsTree(); });   // 低模不进碰撞
 }
 loadEditorProp('castle',   'assets/castle.glb',   60,  false, '城堡');
 loadEditorProp('fortress', 'assets/fortress.glb', 80,  false, '要塞');
@@ -3301,7 +3336,7 @@ function rebuildColliders(){
       box = new THREE.Box3().setFromObject(it.root);
     }
     colliders.push({box, precise, kind:'item', item:it});
-    if(precise) it.root.traverse(o => { if(o.isMesh) wallMeshes.push(o); });
+    if(precise) it.root.traverse(o => { if(o.isMesh && !o.userData.isLo) wallMeshes.push(o); });   // 低模不进贴面射线集
   }
 }
 function ensureColliders(){
@@ -4442,6 +4477,17 @@ function cullSweep(budget){
     const d2 = dx*dx + dy*dy + dz*dz;
     if(it.root.visible){ if(d2 > 193600*R*R) it.root.visible = false; }       // d > 440R 隐藏
     else if(d2 < 144400*R*R) it.root.visible = true;                          // d < 380R 恢复
+    // —— 内嵌 LOD 切换：直径视角 <~70px 换低模（d>34R）、>~85px 换回精模（d<28R）——
+    // 铁板件（拼贴网格与单瓦低模不对应）豁免；低模不存在（loH=null）自动跳过
+    if(it.loH === undefined){
+      it.loH = null;
+      if(!PANEL_KEYS.has(it.key)) for(const c of it.root.children){ if(c.userData && c.userData.isLo){ it.loH = c; break; } }
+    }
+    if(it.loH && it.root.visible){
+      if(it.loH.visible){
+        if(d2 < 784*R*R){ it.loH.visible = false; for(const c of it.root.children){ if(c !== it.loH) c.visible = true; } }
+      } else if(d2 > 1156*R*R){ it.loH.visible = true; for(const c of it.root.children){ if(c !== it.loH) c.visible = false; } }
+    }
   }
   cullIdx = (cullIdx + lim) % cn;
 }
@@ -5734,6 +5780,13 @@ function exportBlenderScene(){
   const skip = new Set();
   if(editGhost && editGhost.root && !editGhost.item) editGhost.root.traverse(o=>skip.add(o));
   if(typeof charHolder !== 'undefined' && charHolder) charHolder.traverse(o=>skip.add(o));   // TPS 主角克隆带 srcUrl，会被当雕像导出
+  // 导出前还原可见性：远景剔除/低模模式下精模 visible=false，会被下方可见性链误跳过——
+  // 全部放置件强制回精模再导出（cullSweep 一秒内会自动恢复运行时状态）
+  for(const it of placedItems){
+    if(it.scene !== currentId) continue;
+    it.root.visible = true;
+    for(const c of it.root.children) c.visible = !(c.userData && c.userData.isLo);
+  }
   scene.updateMatrixWorld(true);
   out.meshes = {};   // 每种资产在实时端实际渲染的网格名单——Blender 按它剪掉原始 GLB 里的内嵌杂物（如 Tripo 背景球）
   scene.traverse(o=>{
@@ -5744,7 +5797,7 @@ function exportBlenderScene(){
     out.items.push({src:o.userData.srcUrl, m:o.matrixWorld.toArray().map(v=>+v.toFixed(5))});
     if(!out.meshes[o.userData.srcUrl]){
       const names = [];
-      o.traverse(x=>{ if(x.isMesh && x.visible) names.push(x.name || ''); });
+      o.traverse(x=>{ if(x.isMesh && x.visible && !x.userData.isLo) names.push(x.name || ''); });
       out.meshes[o.userData.srcUrl] = names;
     }
   });
