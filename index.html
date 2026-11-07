@@ -2568,7 +2568,7 @@ const MIXAMO_MAP = {Hips:'Hip', Spine:'Spine01', Spine1:'Spine02', Spine2:'Spine
 const TPS_PROTO = {smarmor: 'smarmorTps'};   // 三人称与造景解耦：动力甲三人称用新模型（全软蒙皮），造景放置仍是旧模型
 function setPlayerChar(key){
   const pk = TPS_PROTO[key] || key;
-  if(key !== 'ultra' && !editorProtos[pk]){ toast('该角色模型还未加载完成，稍候再试'); return; }
+  if(key !== 'ultra' && !editorProto(pk)){ toast('该角色模型加载中，稍候再试'); return; }   // editorProto 触发按需下载
   playerChar = key;
   try{ localStorage.setItem('wh40k_player_char', key); }catch(e){}
   while(charHolder.children.length) charHolder.remove(charHolder.children[0]);
@@ -2616,7 +2616,7 @@ document.getElementById('pcBtns').addEventListener('click', e => {
 if(playerChar !== 'ultra'){   // 存档角色等其原型异步加载完再应用
   const savedChar = playerChar; playerChar = 'ultra';
   const tryRestore = setInterval(() => {
-    if(editorProtos[TPS_PROTO[savedChar] || savedChar]){ clearInterval(tryRestore); setPlayerChar(savedChar); }
+    if(editorProto(TPS_PROTO[savedChar] || savedChar)){ clearInterval(tryRestore); setPlayerChar(savedChar); }   // editorProto 触发按需下载
   }, 800);
 }
 
@@ -2813,13 +2813,32 @@ loadFortressWall();
    统一高度雾 + 单一日光 envMap 0.15 + 投影。仅供造景模式放置，不默认入场景 */
 const editorProtos = {};
 const ALBEDO_DAMP_KEYS = new Set(['mtn', 'mtnsnow', 'fcmtn', 'gcastle2', 'gcath13', 'garch2', 'fcastle11', 'fcastle12']);   // 雪/白岩高反照率件：入库时 albedo×0.50+全哑光（新自然/白石件白炽就加进来）
-function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
-  // 加载自愈：reload 打断在途 GLB 后 GLTFLoader 既不成功也不报错（卡死），20s 未就绪自动重试（最多 2 次）
-  if((_try || 0) < 2) setTimeout(() => {
-    if(!editorProtos[key]) loadEditorProp(key, url, size, byWidth, label, layFlat, (_try || 0) + 1);
-  }, 20000);
+// 2026-11-07 按需加载改造：资产库 113 件 ~2.5GB，开机全量并发下载把带宽挤爆，任一文件超时
+// 就卡死布景恢复（用户"老是加载不出来"）。loadEditorProp 现在只注册规格；editorProto()
+// 查不到原型时自动触发 ensureProp 下载——恢复队列/面板按钮/批量摆设所有调用点零改动全覆盖。
+const PROP_SPECS = {}, PROP_LOADING = {}, PROP_FAILED = {};
+function loadEditorProp(key, url, size, byWidth, label, layFlat){
+  PROP_SPECS[key] = {url, size, byWidth, label, layFlat};
+}
+function ensureProp(key, _try){
+  const spec = PROP_SPECS[key];
+  if(!spec || editorProtos[key] || PROP_LOADING[key] || (PROP_FAILED[key] && _try === undefined)) return;
+  PROP_LOADING[key] = true;
+  const t = _try || 0;
+  const size = spec.size, byWidth = spec.byWidth, label = spec.label, layFlat = spec.layFlat;
+  const url = t >= 2 ? spec.url + (spec.url.indexOf('?') < 0 ? '?r=' : '&r=') + t : spec.url;   // 第 3 次起换缓存键，绕开半截毒缓存
+  const retry = () => {
+    if(t < 4) setTimeout(() => ensureProp(key, t + 1), [2000, 5000, 10000, 20000][t] || 20000);
+    else { PROP_FAILED[key] = true; console.error(key + ' GLB 重试耗尽（5 次）'); }
+  };
+  // 加载自愈：被 reload 打断的在途 GLB 既不成功也不报错（卡死），30s 未归视为失败重试
+  const watchdog = setTimeout(() => {
+    if(!editorProtos[key] && PROP_LOADING[key]){ PROP_LOADING[key] = false; retry(); }
+  }, 30000);
   gltfLoader.load(url,
     (gltf) => {
+      clearTimeout(watchdog); PROP_LOADING[key] = false;
+      if(editorProtos[key]) return;   // 看门狗已重试、原请求迟到：丢弃避免重复注册
       const m = gltf.scene;
       m.userData.srcUrl = url.split('?')[0];   // Blender 导出溯源：克隆体经 userData 深拷贝继承
       shrinkTextures(m);
@@ -2895,7 +2914,7 @@ function loadEditorProp(key, url, size, byWidth, label, layFlat, _try){
       if(st && st.textContent.indexOf(label) < 0) st.textContent += ' · ' + label + '✓';
     },
     undefined,
-    (err) => console.error(key + ' GLB load error', err));
+    (err) => { clearTimeout(watchdog); PROP_LOADING[key] = false; console.error(key + ' GLB load error (try ' + t + ')', err); retry(); });
 }
 function buildPropBVH(grp){
   if(!bvhReady || !grp) return;
@@ -3322,7 +3341,7 @@ function clearPave(){
 function buildPave(cfg){
   if(!current || currentId !== 'hive' || !current.terrain) return false;
   const types = ['fpanel', 'vpanel', 'ipanel', 'mpanel'];
-  for(const k of types) if(!editorProtos[k]) return false;
+  for(const k of types) if(!editorProto(k)) return false;   // editorProto 触发按需下载（铁板地毯依赖 4 种板件）
   clearPave();
   ensureColliders();
   const megaC = colliders.find(c => c.kind === 'mega');
@@ -3471,7 +3490,7 @@ function snakeUnits(cfg){
   return {lo, heavies};
 }
 function buildSnake(cfg){
-  if(!current || currentId !== 'hive' || !current.terrain || !editorProtos['ealienlo']) return false;
+  if(!current || currentId !== 'hive' || !current.terrain || !editorProto('ealienlo')) return false;   // editorProto 触发按需下载
   clearSnake();
   const units = [];
   for(const w of cfg.waves) units.push(...snakeUnits(w).lo);
@@ -3561,7 +3580,7 @@ function flockUnits(wave){
   return out;
 }
 function buildFlock(cfg){
-  if(!current || currentId !== 'hive' || !editorProtos['edragonlo']) return false;
+  if(!current || currentId !== 'hive' || !editorProto('edragonlo')) return false;   // editorProto 触发按需下载
   clearFlock();
   const units = [];
   for(const w of cfg.waves) units.push(...flockUnits(w));
@@ -4253,7 +4272,9 @@ function editorProto(key){
   if(key === 'wall')   return (wallInfo.loaded && hiveWallGroup.children[0]) || null;
   if(key === 'marine') return (player.loaded && player.model) || null;
   if(key.indexOf('pav') === 0 || key === 'cloudGray' || key === 'cloudWhite') return {procedural:true};  // 程序化资产随时可用
-  return editorProtos[key] || null;   // 造景资产库（castle/fortress/throne/tile…）
+  const p = editorProtos[key];
+  if(!p) ensureProp(key);   // 按需加载：谁查谁触发下载（恢复队列/按钮/批量摆设自动覆盖；加载中/已失败则空转极廉价）
+  return p || null;   // 造景资产库（castle/fortress/throne/tile…）
 }
 function editorSpawn(key, extra){
   extra = extra || {};
@@ -4436,7 +4457,10 @@ function editorSave(){
         return o;
       });
     const q = editorRestoreQ[currentId];
-    if(q && q.idx < q.list.length) out = out.concat(q.list.slice(q.idx));   // 增量恢复未完成时编辑：把还没摆出来的尾巴一起存回，防止存档被截断
+    if(q){   // 增量恢复未完成时编辑：把还没摆出来的尾巴+跳过件一起存回，防止存档被截断
+      if(q.idx < q.list.length) out = out.concat(q.list.slice(q.idx));
+      if(q.skipped && q.skipped.length) out = out.concat(q.skipped);
+    }
     localStorage.setItem(EDIT_LS(), JSON.stringify(out));
   }catch(err){}
 }
@@ -4505,27 +4529,80 @@ function editorRestore(){
   if(!q){
     let list = [];
     try{ list = JSON.parse(localStorage.getItem(EDIT_LS())) || []; }catch(err){}
-    if(!list.length){ editorRestored[currentId] = true; return; }
+    if(!list.length){ editorRestored[currentId] = true; prefetchAllProps(); return; }   // 空布景：直接错峰预取整库
     q = editorRestoreQ[currentId] = {list, idx: 0};
+  }
+  if(!q.skipKeys){ q.skipKeys = new Set(); q.skipped = []; q.blockKey = null; q.blockTicks = 0; }
+  // 流水线预取：挡路键之外，再把队列前方最近 2 个缺失键一起拉起来（editorProto 触发 ensureProp）
+  let seen = 0;
+  for(let i = q.idx; i < q.list.length && seen < 3; i++){
+    const k2 = q.list[i].key;
+    if(!q.skipKeys.has(k2) && !editorProto(k2)) seen++;
   }
   // 严格按存档顺序推进（角色吸附堆叠依赖先摆底座），每轮限量让页面能喘气重绘
   const CHUNK = 250;
   let n = 0;
   while(q.idx < q.list.length && n < CHUNK){
     const it = q.list[q.idx];
+    if(q.skipKeys.has(it.key)){ q.skipped.push(it); q.idx++; continue; }   // 下载失败键：先跳过，到货后补摆
     if(!editorProto(it.key)) break;   // 该件资产未下载完：停在这等它，已就绪的先展示
     editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
     q.idx++; n++;
   }
+  if(q.idx < q.list.length && n === 0){
+    // 卡在同一个键：计数；重试耗尽或卡超 ~90s 就跳过该键继续建城（别让一个文件拖死全城）
+    const bk = q.list[q.idx].key;
+    if(q.blockKey === bk) q.blockTicks++; else { q.blockKey = bk; q.blockTicks = 1; }
+    if(PROP_FAILED[bk] || q.blockTicks > 60){
+      q.skipKeys.add(bk); q.blockKey = null; q.blockTicks = 0;
+      toast('资产「' + bk + '」多次下载失败，先跳过继续恢复（到货后自动补摆）');
+      return;
+    }
+    toast('布景恢复中 ' + q.idx + ' / ' + q.list.length + ' 件——下载资产「' + bk + '」' + (PROP_LOADING[bk] ? '中' : '排队中') + '…');
+    return;
+  }
   if(q.idx >= q.list.length){
+    // 主队列走完：补摆之前跳过的（资产到了就摆，没到的键定期复活重试）
+    if(q.skipped.length){
+      const rest = [];
+      for(const it of q.skipped){
+        if(editorProto(it.key)) editorPlace(it.key, it.x, it.z, it.rotY, it.scale, true, {shape:it.shape, alt:it.alt, tilt:it.tilt});
+        else rest.push(it);
+      }
+      q.skipped = rest;
+      if(rest.length){
+        q.reviveTick = (q.reviveTick || 0) + 1;
+        if(q.reviveTick % 20 === 0){   // 每 ~30s 给失败键一次复活机会
+          const miss = [...new Set(rest.map(it => it.key))];
+          miss.forEach(k2 => { delete PROP_FAILED[k2]; ensureProp(k2); });
+        }
+        toast('布景已恢复 ' + (q.list.length - rest.length) + ' / ' + q.list.length + ' 件——缺「' +
+          [...new Set(rest.map(it => it.key))].join('/') + '」仍在重试下载…');
+        return;
+      }
+    }
     delete editorRestoreQ[currentId];
     editorRestored[currentId] = true;
     toast('造景布局已恢复（' + q.list.length + ' 件）');
+    prefetchAllProps();   // 布景齐了再错峰补齐整库资产（面板按钮即点即用）
   } else if(n){
     toast('布景恢复中 ' + q.idx + ' / ' + q.list.length + ' 件…');
-  } else {
-    toast('布景恢复中 ' + q.idx + ' / ' + q.list.length + ' 件——等待资产「' + q.list[q.idx].key + '」下载…');
   }
+}
+// 整库错峰预取：恢复完成后每 1.5s 拉一件缺失资产（不与恢复抢带宽，慢慢把库补齐）
+let prefetchKicked = false;
+function prefetchAllProps(){
+  if(prefetchKicked) return;
+  prefetchKicked = true;
+  const keys = Object.keys(PROP_SPECS);
+  let i = 0;
+  const next = () => {
+    while(i < keys.length && (editorProtos[keys[i]] || PROP_LOADING[keys[i]] || PROP_FAILED[keys[i]])) i++;
+    if(i >= keys.length) return;
+    ensureProp(keys[i]); i++;
+    setTimeout(next, 1500);
+  };
+  setTimeout(next, 3000);
 }
 
 /* —— 系统建筑（巨构/城墙排）纳入造景编辑：点选/移动/旋转/缩放 + 独立存档 —— */
@@ -4897,6 +4974,8 @@ document.getElementById('eaHiveCity').addEventListener('click', () => {
     ['edragon', -100, -300, 0.6, 1, {alt: 150}], ['edragon', 60, -260, 2.4, 0.8, {alt: 110}],
     ['emship', 300, -650, 0.4, 1, {alt: 420, tilt: -0.12}]
   ];
+  const missing = [...new Set(spec.map(s => s[0]))].filter(k => !editorProto(k));   // editorProto 触发按需下载
+  if(missing.length){ toast('布景资产加载中（' + missing.join('/') + '），稍候再点'); return; }
   let n = 0; const added = [];
   for(const s of spec){ const it2 = editorPlace(s[0], s[1], s[2], s[3], s[4], true, s[5]); if(it2){ n++; added.push(it2); } }
   if(added.length) pushUndo({label: '蜂巢城布景（' + n + ' 件）', adds: added});
